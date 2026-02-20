@@ -1,0 +1,10 @@
+{
+    "id": "{{IDENTIFIER}}",
+    "name": "{{APP_NAME}}",
+    "version": "{{VERSION}}",
+    "description": "{{DESCRIPTION}}",
+    "author": "{{CREATOR}}",
+    "category": "editor",
+    "icon": "puzzle",
+    "color": "linear-gradient(135deg, #667eea, #764ba2)"
+}

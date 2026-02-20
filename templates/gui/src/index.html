@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{APP_NAME}}</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>{{APP_NAME}}</h1>
+        <p>Aplicación creada con DEX STUDIO</p>
+        <div class="card">
+            <input type="text" id="name-input" placeholder="Tu nombre...">
+            <button onclick="greet()">Saludar</button>
+            <p id="result"></p>
+        </div>
+    </div>
+    <script>
+        async function greet() {
+            const name = document.getElementById('name-input').value || 'Mundo';
+            const res = await window.pywebview.api.greet(name);
+            document.getElementById('result').textContent = res.message;
+        }
+    </script>
+</body>
+</html>

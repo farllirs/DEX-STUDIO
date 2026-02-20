@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEX STUDIO | Creador de Apps para Linux</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div class="app-container">
+
+    <!-- ── Sidebar ──────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+            <img src="assets/logo.png" alt="DEX STUDIO" class="sidebar-logo">
+            <div>
+                <h1 class="app-title">DEX STUDIO</h1>
+                <p class="app-version">v1.0.0</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-section">
+                <p class="nav-section-title">General</p>
+                <button class="nav-item active" onclick="app.showView('home')" data-view="home">
+                    <i data-lucide="home"></i>
+                    <span>Inicio</span>
+                </button>
+                <button class="nav-item" onclick="app.showView('new')" data-view="new">
+                    <i data-lucide="file-plus"></i>
+                    <span>Nuevo Proyecto</span>
+                </button>
+                <button class="nav-item" onclick="app.openProject()" data-view="open">
+                    <i data-lucide="folder-open"></i>
+                    <span>Abrir Proyecto</span>
+                </button>
+            </div>
+
+            <div class="nav-section">
+                <p class="nav-section-title">Herramientas</p>
+                <button class="nav-item" onclick="app.showView('editor')" data-view="editor">
+                    <i data-lucide="code-2"></i>
+                    <span>Editor</span>
+                </button>
+                <button class="nav-item" onclick="app.showView('settings')" data-view="settings">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <span>Configuración</span>
+                </button>
+                <button class="nav-item" onclick="app.showView('extensions')" data-view="extensions">
+                    <i data-lucide="puzzle"></i>
+                    <span>Extensiones</span>
+                </button>
+            </div>
+
+            <div class="nav-section">
+                <p class="nav-section-title">Recientes</p>
+                <div id="recent-projects" class="recent-list">
+                    <p class="empty-state">No hay proyectos recientes</p>
+                </div>
+            </div>
+
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="footer-btn" title="Git & Herramientas" onclick="app.showGitMenu()">
+                <i data-lucide="git-branch"></i>
+            </button>
+            <button class="footer-btn" title="Ayuda" onclick="app.showHelp()">
+                <i data-lucide="circle-help"></i>
+            </button>
+            <button class="footer-btn" title="Más opciones" onclick="app.showMoreOptions()">
+                <i data-lucide="ellipsis"></i>
+            </button>
+        </div>
+
+    </aside>
+
+    <!-- ── Main Content ──────────────────────────────────────── -->
+    <div class="main-content">
+
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <div class="breadcrumb">
+                <span id="breadcrumb-text">DEX STUDIO</span>
+            </div>
+
+            <div class="top-bar-actions">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="Buscar…" class="search-input">
+                </div>
+
+                <div class="action-buttons">
+                    <button class="action-btn" onclick="app.runProject()">
+                        <i data-lucide="play"></i>
+                        <span>Ejecutar</span>
+                    </button>
+                    <button class="action-btn" onclick="app.compileProject()">
+                        <i data-lucide="package"></i>
+                        <span>Compilar</span>
+                    </button>
+                    <button class="action-btn" onclick="app.toggleConsole()">
+                        <i data-lucide="terminal"></i>
+                        <span id="console-label">Terminal</span>
+                    </button>
+                </div>
+
+                <div class="theme-selector">
+                    <button class="theme-btn" onclick="app.toggleThemeMenu()" title="Cambiar tema">
+                        <i data-lucide="sun-moon"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="content-area">
+
+            <!-- ── View: Inicio ──────────────────────────────── -->
+            <section id="view-home" class="view-section active">
+                <div class="view-container home-container">
+                    <div class="home-hero">
+                        <div class="home-logo">
+                            <img src="assets/logo.png" alt="DEX STUDIO" style="width:40px;height:40px;border-radius:8px;object-fit:contain">
+                        </div>
+                        <h1 class="home-title">DEX STUDIO</h1>
+                        <p class="home-subtitle">Creador de Aplicaciones para Linux</p>
+                    </div>
+
+                    <div class="home-actions">
+                        <button class="home-action-card" onclick="app.showView('new')">
+                            <div class="home-action-icon" style="background: linear-gradient(135deg, #0a84ff, #5e5ce6)">
+                                <i data-lucide="file-plus"></i>
+                            </div>
+                            <div class="home-action-info">
+                                <h3>Nuevo Proyecto</h3>
+                                <p>Crea una app desde plantilla o desde cero</p>
+                            </div>
+                            <i data-lucide="chevron-right" class="home-action-arrow"></i>
+                        </button>
+                        <button class="home-action-card" onclick="app.openProject()">
+                            <div class="home-action-icon" style="background: linear-gradient(135deg, #30d158, #34c759)">
+                                <i data-lucide="folder-open"></i>
+                            </div>
+                            <div class="home-action-info">
+                                <h3>Abrir Proyecto</h3>
+                                <p>Continúa trabajando en un proyecto existente</p>
+                            </div>
+                            <i data-lucide="chevron-right" class="home-action-arrow"></i>
+                        </button>
+                        <button class="home-action-card" onclick="app.showView('extensions')">
+                            <div class="home-action-icon" style="background: linear-gradient(135deg, #bf5fff, #7c3aed)">
+                                <i data-lucide="puzzle"></i>
+                            </div>
+                            <div class="home-action-info">
+                                <h3>Extensiones</h3>
+                                <p>Descarga e instala extensiones del marketplace</p>
+                            </div>
+                            <i data-lucide="chevron-right" class="home-action-arrow"></i>
+                        </button>
+                    </div>
+
+                    <div class="home-section">
+                        <h3 class="home-section-title">
+                            <i data-lucide="clock"></i> Proyectos Recientes
+                        </h3>
+                        <div id="home-recent-projects" class="home-recent-list">
+                            <p class="empty-state">No hay proyectos recientes</p>
+                        </div>
+                    </div>
+
+                    <div class="home-section">
+                        <h3 class="home-section-title">
+                            <i data-lucide="keyboard"></i> Atajos Rápidos
+                        </h3>
+                        <div class="home-shortcuts">
+                            <div class="home-shortcut"><kbd>Ctrl+S</kbd> Guardar</div>
+                            <div class="home-shortcut"><kbd>Ctrl+N</kbd> Nuevo archivo</div>
+                            <div class="home-shortcut"><kbd>Ctrl+B</kbd> Terminal</div>
+                            <div class="home-shortcut"><kbd>Ctrl+W</kbd> Cerrar pestaña</div>
+                        </div>
+                    </div>
+
+                    <p class="home-footer-text">DEX STUDIO v1.0.0 — Creador de Aplicaciones para Linux</p>
+                </div>
+            </section>
+
+            <!-- ── View: Nuevo Proyecto ──────────────────────── -->
+            <section id="view-new" class="view-section">
+                <div class="view-container">
+
+                    <div class="new-project-hero">
+                        <div class="hero-icon">
+                            <i data-lucide="rocket"></i>
+                        </div>
+                        <h2>Nuevo Proyecto</h2>
+                        <p>Elige una plantilla y configura tu proyecto</p>
+                    </div>
+
+                    <!-- Template Selector -->
+                    <div class="template-selector">
+                        <div class="template-card selected" data-template="GUI" onclick="app.selectTemplate('GUI')">
+                            <div class="template-icon" style="background: linear-gradient(135deg, #0a84ff, #5e5ce6)">
+                                <i data-lucide="monitor"></i>
+                            </div>
+                            <h4>GUI</h4>
+                            <p>Interfaz Gráfica</p>
+                        </div>
+                        <div class="template-card" data-template="CLI" onclick="app.selectTemplate('CLI')">
+                            <div class="template-icon" style="background: linear-gradient(135deg, #30d158, #34c759)">
+                                <i data-lucide="terminal"></i>
+                            </div>
+                            <h4>CLI</h4>
+                            <p>Línea de Comandos</p>
+                        </div>
+                        <div class="template-card" data-template="Web" onclick="app.selectTemplate('Web')">
+                            <div class="template-icon" style="background: linear-gradient(135deg, #ff9f0a, #ff6723)">
+                                <i data-lucide="globe"></i>
+                            </div>
+                            <h4>Web</h4>
+                            <p>Servidor HTTP</p>
+                        </div>
+                        <div class="template-card" data-template="Extension" onclick="app.selectTemplate('Extension')">
+                            <div class="template-icon" style="background: linear-gradient(135deg, #bf5fff, #7c3aed)">
+                                <i data-lucide="puzzle"></i>
+                            </div>
+                            <h4>Extensión</h4>
+                            <p>Plugin para DEX</p>
+                        </div>
+                        <div class="template-card" data-template="Blank" onclick="app.selectTemplate('Blank')">
+                            <div class="template-icon" style="background: linear-gradient(135deg, #636366, #48484a)">
+                                <i data-lucide="file"></i>
+                            </div>
+                            <h4>En Blanco</h4>
+                            <p>Proyecto vacío</p>
+                        </div>
+                    </div>
+
+                    <!-- Form -->
+                    <div class="form-container">
+
+                        <div class="form-section">
+                            <h3 class="form-section-title">
+                                <i data-lucide="info"></i>
+                                Información Básica
+                            </h3>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="p-name">Nombre del Proyecto</label>
+                                    <input type="text" id="p-name" placeholder="Mi App Linux" class="form-input">
+                                </div>
+                                <div class="form-group" id="fg-identifier">
+                                    <label for="p-id">Identificador</label>
+                                    <input type="text" id="p-id" placeholder="com.creador.app" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-creator">Creador</label>
+                                    <input type="text" id="p-creator" placeholder="Nombre o Empresa" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-version">Versión</label>
+                                    <input type="text" id="p-version" value="1.0.0" class="form-input">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section" id="fs-config">
+                            <h3 class="form-section-title">
+                                <i data-lucide="settings-2"></i>
+                                Configuración
+                            </h3>
+                            <div class="form-grid">
+                                <div class="form-group" id="fg-category">
+                                    <label for="p-category">Categoría</label>
+                                    <select id="p-category" class="form-input">
+                                        <option value="Utility">Utilidad</option>
+                                        <option value="Development">Desarrollo</option>
+                                        <option value="Game">Juego</option>
+                                        <option value="Graphics">Gráficos</option>
+                                        <option value="Network">Red</option>
+                                        <option value="Office">Oficina</option>
+                                        <option value="Science">Ciencia</option>
+                                        <option value="System">Sistema</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="fg-license">
+                                    <label for="p-license">Licencia</label>
+                                    <input type="text" id="p-license" value="MIT" class="form-input">
+                                </div>
+                                <div class="form-group" id="fg-icon">
+                                    <label for="p-icon">Icono Personalizado</label>
+                                    <input type="text" id="p-icon" placeholder="/ruta/al/icono.png" class="form-input">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hidden select that stores the actual type value -->
+                        <input type="hidden" id="p-type" value="GUI">
+
+                        <div class="form-section">
+                            <h3 class="form-section-title">
+                                <i data-lucide="file-text"></i>
+                                Descripción
+                            </h3>
+                            <div class="form-group full-width">
+                                <textarea id="p-desc" rows="3"
+                                    placeholder="Breve descripción de la aplicación…"
+                                    class="form-input"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn-primary btn-lg" onclick="app.createProject()">
+                                <i data-lucide="rocket"></i>
+                                Crear Proyecto
+                            </button>
+                            <button class="btn-secondary" onclick="app.resetForm()">
+                                <i data-lucide="rotate-ccw"></i>
+                                Limpiar
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── View: Editor ──────────────────────────────── -->
+            <section id="view-editor" class="view-section">
+                <div class="file-explorer-panel">
+                    <div class="explorer-header">
+                        <h3>Explorador</h3>
+                        <div class="explorer-actions">
+                            <button onclick="app.createFile()" title="Nuevo archivo">
+                                <i data-lucide="file-plus"></i>
+                            </button>
+                            <button onclick="app.createFolder()" title="Nueva carpeta">
+                                <i data-lucide="folder-plus"></i>
+                            </button>
+                            <button onclick="app.refreshExplorer()" title="Actualizar">
+                                <i data-lucide="refresh-cw"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <ul id="file-list" class="file-tree"></ul>
+                </div>
+
+                <div class="editor-container">
+                    <div class="editor-tabs" id="editor-tabs"></div>
+                    <div class="editor-header">
+                        <span id="current-file" class="file-info">Ningún archivo abierto</span>
+                        <div class="editor-actions">
+                            <span id="ext-buttons"></span>
+                            <button onclick="app.saveFile()" class="btn-small" title="Guardar (Ctrl+S)">
+                                <i data-lucide="save"></i> Guardar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="editor-wrapper">
+                        <pre id="code-highlight" class="code-highlight" aria-hidden="true"></pre>
+                        <textarea id="code-editor" spellcheck="false" class="code-editor"
+                            placeholder="Abre un archivo del explorador para comenzar a editar..."></textarea>
+                        <div id="image-viewer-panel" class="image-viewer-panel" style="display:none">
+                            <div class="image-viewer-content">
+                                <img id="image-viewer-img" src="" alt="Preview">
+                                <p id="image-viewer-name" class="image-viewer-name"></p>
+                            </div>
+                        </div>
+                        <div id="preview-panel" class="preview-panel" style="display:none">
+                            <iframe id="preview-iframe" class="preview-iframe"
+                                sandbox="allow-scripts allow-same-origin"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── View: Configuración ───────────────────────── -->
+            <section id="view-settings" class="view-section">
+                <div class="view-container">
+                    <div class="view-header">
+                        <h2>Configuración</h2>
+                        <p>Personaliza DEX STUDIO según tus preferencias</p>
+                    </div>
+
+                    <div class="settings-grid">
+
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i data-lucide="palette"></i>
+                                <h3>Apariencia</h3>
+                            </div>
+                            <div class="settings-content">
+                                <div class="setting-item">
+                                    <label>Tema de Interfaz</label>
+                                    <select id="ui-theme" onchange="app.changeUITheme(this.value)" class="form-input">
+                                        <option value="dark">Dark</option>
+                                        <option value="light">Light</option>
+                                        <option value="cyberpunk">Cyberpunk</option>
+                                    </select>
+                                </div>
+                                <div class="setting-item">
+                                    <label>Tema del Editor</label>
+                                    <select id="editor-theme" onchange="app.changeEditorTheme(this.value)" class="form-input">
+                                        <option value="dark">Oscuro</option>
+                                        <option value="light">Claro</option>
+                                        <option value="dracula">Dracula</option>
+                                        <option value="nord">Nord</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i data-lucide="type"></i>
+                                <h3>Editor</h3>
+                            </div>
+                            <div class="settings-content">
+                                <div class="setting-item">
+                                    <label>Tamaño de Fuente</label>
+                                    <select id="font-size" onchange="app.changeFontSize(this.value)" class="form-input">
+                                        <option value="11">11px</option>
+                                        <option value="12">12px</option>
+                                        <option value="13" selected>13px</option>
+                                        <option value="14">14px</option>
+                                        <option value="15">15px</option>
+                                        <option value="16">16px</option>
+                                    </select>
+                                </div>
+                                <div class="setting-item">
+                                    <label>Familia de Fuente</label>
+                                    <select id="font-family" onchange="app.changeFontFamily(this.value)" class="form-input">
+                                        <option value="'Fira Code', monospace">Fira Code</option>
+                                        <option value="'Courier New', monospace">Courier New</option>
+                                        <option value="'Monaco', monospace">Monaco</option>
+                                        <option value="monospace">Monospace</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i data-lucide="terminal"></i>
+                                <h3>Terminal</h3>
+                            </div>
+                            <div class="settings-content">
+                                <div class="setting-item">
+                                    <label>Historial máximo</label>
+                                    <select id="cmd-history-limit"
+                                        onchange="app.cmdHistoryLimit=parseInt(this.value)"
+                                        class="form-input">
+                                        <option value="25">25 comandos</option>
+                                        <option value="50" selected>50 comandos</option>
+                                        <option value="100">100 comandos</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <div class="settings-card-header">
+                                <i data-lucide="info"></i>
+                                <h3>Acerca de</h3>
+                            </div>
+                            <div class="settings-content">
+                                <p class="version-text">DEX STUDIO v1.0.0</p>
+                                <p class="setting-description">Creador de Aplicaciones para Linux</p>
+                                <p class="setting-description" style="margin-top:6px;font-size:11px">
+                                    Motor: PyWebView + Python 3
+                                </p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── View: Extensiones ─────────────────────────── -->
+            <section id="view-extensions" class="view-section">
+                <div class="view-container">
+                    <div class="view-header">
+                        <h2>Extensiones</h2>
+                        <p>Gestiona y descarga extensiones para DEX STUDIO</p>
+                    </div>
+
+                    <div class="ext-section">
+                        <div class="ext-section-header">
+                            <h3><i data-lucide="check-circle"></i> Extensiones Instaladas</h3>
+                        </div>
+                        <!-- El JS carga las extensiones instaladas en este contenedor -->
+                        <div id="installed-extensions" class="extensions-grid">
+                            <p class="empty-state">Cargando extensiones...</p>
+                        </div>
+                    </div>
+
+                    <div class="ext-section" style="margin-top:32px">
+                        <div class="ext-section-header">
+                            <h3><i data-lucide="download"></i> Descargar Extensiones</h3>
+                        </div>
+                        <!-- El JS puede también poblar este contenedor dinámicamente -->
+                        <div id="available-extensions" class="extensions-grid">
+                            <div class="ext-download-card">
+                                <div class="ext-download-icon">
+                                    <i data-lucide="globe"></i>
+                                </div>
+                                <div class="ext-info">
+                                    <h4>Repositorio de Extensiones</h4>
+                                    <p>Busca y descarga extensiones creadas por la comunidad</p>
+                                </div>
+                                <button class="btn-secondary btn-sm" onclick="app.openExtRepo()">
+                                    <i data-lucide="external-link"></i> Abrir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </div><!-- /content-area -->
+
+        <!-- ── Terminal ──────────────────────────────────────── -->
+        <div id="bottom-panel" class="console-panel console-visible">
+            <div class="console-header">
+                <span class="console-title">Terminal</span>
+                <div class="console-controls">
+                    <button onclick="app.copyLastLog()" title="Copiar" class="console-btn">
+                        <i data-lucide="copy"></i>
+                    </button>
+                    <button onclick="app.clearTerminal()" title="Limpiar" class="console-btn">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                    <button id="console-toggle" onclick="app.toggleConsole()" title="Cerrar" class="console-btn">
+                        <i data-lucide="chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            <pre id="terminal-out" class="console-output"></pre>
+            <div class="terminal-input-row">
+                <span class="terminal-prompt" id="terminal-prompt">~$</span>
+                <input type="text" id="terminal-input" class="terminal-input"
+                    placeholder="Escribe un comando…"
+                    autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+
+    </div><!-- /main-content -->
+</div><!-- /app-container -->
+
+<!-- ── Context Menu ──────────────────────────────────────────── -->
+<div id="context-menu" class="context-menu">
+    <button class="context-item" onclick="app.createFileInFolder(app.contextPath)">
+        <i data-lucide="file-plus"></i> Nuevo Archivo Aquí
+    </button>
+    <button class="context-item" onclick="app.createFolderInFolder(app.contextPath)">
+        <i data-lucide="folder-plus"></i> Nueva Carpeta Aquí
+    </button>
+    <div class="context-separator"></div>
+    <button class="context-item" onclick="app.renameFile(app.contextPath)">
+        <i data-lucide="pencil"></i> Renombrar
+    </button>
+    <button class="context-item" onclick="app.duplicateItem(app.contextPath)">
+        <i data-lucide="copy"></i> Duplicar
+    </button>
+    <button class="context-item" onclick="app.moveItemPrompt(app.contextPath)">
+        <i data-lucide="move"></i> Mover a...
+    </button>
+    <div class="context-separator"></div>
+    <button class="context-item context-danger" onclick="app.deleteFile(app.contextPath)">
+        <i data-lucide="trash-2"></i> Eliminar
+    </button>
+</div>
+
+<!-- ── Modal: Ayuda ──────────────────────────────────────────── -->
+<div id="help-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2>Ayuda — DEX STUDIO</h2>
+            <button class="modal-close" onclick="app.closeModal('help-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+
+            <div class="help-section">
+                <h3>Atajos de Teclado</h3>
+                <div class="shortcut-grid">
+                    <div class="shortcut-item"><kbd>Ctrl S</kbd><span>Guardar</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl N</kbd><span>Nuevo archivo</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl B</kbd><span>Toggle terminal</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl W</kbd><span>Cerrar pestaña</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl `</kbd><span>Focus terminal</span></div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h3>Primeros Pasos</h3>
+                <ol class="help-steps">
+                    <li>Crea un proyecto con nombre, ID e información básica</li>
+                    <li>Edita archivos desde el explorador lateral</li>
+                    <li>Usa <strong>Ejecutar</strong> para probar la app</li>
+                    <li>Usa <strong>Compilar</strong> para empaquetar como .deb</li>
+                </ol>
+            </div>
+
+            <div class="help-section">
+                <h3>Estructura de Proyecto</h3>
+                <pre class="help-code">proyecto/
+├── main.py          # Punto de entrada
+├── metadata.json    # Configuración
+├── config.json      # Config del motor
+├── src/             # Código fuente
+├── assets/          # Recursos
+├── icons/           # Iconos
+└── build/           # Compilados</pre>
+            </div>
+
+            <div class="help-section">
+                <h3>Acerca de</h3>
+                <p style="font-size:13px;color:var(--text-secondary)">
+                    DEX STUDIO v1.0.0 — Motor PyWebView + Python
+                </p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Opciones ───────────────────────────────────────── -->
+<div id="options-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-sm">
+        <div class="modal-header">
+            <h2>Opciones</h2>
+            <button class="modal-close" onclick="app.closeModal('options-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="padding:0">
+            <button class="option-row" onclick="app.closeModal('options-modal');location.reload()">
+                <i data-lucide="refresh-cw"></i>
+                <div>
+                    <strong>Recargar interfaz</strong>
+                    <span>Reinicia la UI sin perder datos</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.clearRecentProjects()">
+                <i data-lucide="trash"></i>
+                <div>
+                    <strong>Limpiar recientes</strong>
+                    <span>Borra la lista de proyectos recientes</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('options-modal');app.exportProjectInfo()">
+                <i data-lucide="file-text"></i>
+                <div>
+                    <strong>Info del proyecto</strong>
+                    <span>Muestra metadata.json en consola</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('options-modal');app.toggleDevTools()">
+                <i data-lucide="bug"></i>
+                <div>
+                    <strong>Dev Tools</strong>
+                    <span>Abrir herramientas de desarrollo</span>
+                </div>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Git & Herramientas ────────────────────────────── -->
+<div id="git-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2>Git & Herramientas</h2>
+            <button class="modal-close" onclick="app.closeModal('git-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="padding:0">
+
+            <p class="git-section-title">Repositorio del Editor</p>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.openEditorRepo()">
+                <i data-lucide="github"></i>
+                <div>
+                    <strong>DEX STUDIO en GitHub</strong>
+                    <span>Ver el repositorio oficial del editor</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.checkForUpdates()">
+                <i data-lucide="refresh-cw"></i>
+                <div>
+                    <strong>Buscar Actualizaciones</strong>
+                    <span>Verificar si hay una nueva versión</span>
+                </div>
+            </button>
+
+            <p class="git-section-title" style="margin-top:8px">Proyecto Actual</p>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.initializeGitRepo()">
+                <i data-lucide="git-branch"></i>
+                <div>
+                    <strong>Inicializar Git</strong>
+                    <span>Crear repositorio en el proyecto actual</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.pushToGithub()">
+                <i data-lucide="upload"></i>
+                <div>
+                    <strong>Subir a GitHub</strong>
+                    <span>Push del proyecto a un repositorio remoto</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.importFromGit()">
+                <i data-lucide="download"></i>
+                <div>
+                    <strong>Importar desde Git</strong>
+                    <span>Clonar un repositorio existente</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.closeModal('git-modal');app.connectGitHub()">
+                <i data-lucide="key"></i>
+                <div>
+                    <strong>Configurar Token</strong>
+                    <span>Guardar token de acceso personal</span>
+                </div>
+            </button>
+
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Extension Detail ──────────────────────────────── -->
+<div id="ext-detail-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-lg">
+        <div class="modal-header">
+            <div style="display:flex;align-items:center;gap:12px">
+                <div id="ext-detail-icon" class="ext-detail-hero-icon">
+                    <i data-lucide="puzzle"></i>
+                </div>
+                <div>
+                    <h2 id="ext-detail-name">Extensión</h2>
+                    <p id="ext-detail-meta" style="font-size:11px;color:var(--text-tertiary);margin-top:2px"></p>
+                </div>
+            </div>
+            <button class="modal-close" onclick="app.closeModal('ext-detail-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="ext-detail-actions" style="margin-bottom:16px;display:flex;gap:8px"></div>
+            <p id="ext-detail-desc" style="font-size:13px;color:var(--text-secondary);margin-bottom:16px"></p>
+            <div class="ext-detail-readme-container">
+                <h3 style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+                    <i data-lucide="book-open" style="width:14px;height:14px"></i> README
+                </h3>
+                <div id="ext-detail-readme" class="ext-detail-readme">
+                    <p class="empty-state">Cargando...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Notifications ─────────────────────────────────────────── -->
+<div id="notification-container" class="notification-container"></div>
+
+<script src="js/main.js"></script>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => lucide.createIcons());
+    } else {
+        lucide.createIcons();
+    }
+</script>
+</body>
+</html>

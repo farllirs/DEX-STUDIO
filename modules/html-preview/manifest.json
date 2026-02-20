@@ -1,0 +1,10 @@
+{
+    "id": "html-preview",
+    "name": "Preview HTML",
+    "version": "1.0.0",
+    "description": "Previsualiza archivos HTML en una pestaña del editor",
+    "author": "DEX STUDIO",
+    "category": "editor",
+    "icon": "eye",
+    "color": "linear-gradient(135deg, #43e97b, #38f9d7)"
+}

@@ -1,0 +1,11 @@
+{
+    "id": "autocompletado",
+    "name": "Autocompletado",
+    "version": "1.0.0",
+    "description": "Sugerencias inteligentes de código mientras escribes",
+    "author": "DEX STUDIO",
+    "category": "editor",
+    "icon": "wand-2",
+    "color": "linear-gradient(135deg, #f093fb, #f5576c)",
+    "has_wordlists": true
+}

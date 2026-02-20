@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{APP_NAME}}</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <h1>{{APP_NAME}}</h1>
+        <span class="badge">v{{VERSION}}</span>
+    </nav>
+    <main class="container">
+        <div class="hero">
+            <h2>¡Bienvenido!</h2>
+            <p>Aplicación web creada con DEX STUDIO</p>
+            <button onclick="fetchInfo()">Ver Info del Servidor</button>
+            <pre id="output"></pre>
+        </div>
+    </main>
+    <script>
+        async function fetchInfo() {
+            const res = await fetch('/api/info');
+            const data = await res.json();
+            document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>

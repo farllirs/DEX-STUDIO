@@ -1,0 +1,26 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, sans-serif; background: #0f0f0f; color: #e0e0e0; }
+.navbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 24px; background: #1a1a1a; border-bottom: 1px solid #333;
+}
+.navbar h1 { font-size: 18px; }
+.badge {
+    font-size: 11px; padding: 2px 8px; background: #333;
+    border-radius: 12px; color: #888;
+}
+.container { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+.hero { text-align: center; }
+h2 { font-size: 2rem; margin-bottom: 8px; }
+p { color: #888; margin-bottom: 24px; }
+button {
+    padding: 10px 24px; background: #0a84ff; color: #fff;
+    border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+button:hover { opacity: 0.85; }
+pre {
+    margin-top: 24px; background: #1a1a1a; padding: 16px;
+    border-radius: 8px; text-align: left; color: #0a84ff;
+    border: 1px solid #333; display: none;
+}
+pre:not(:empty) { display: block; }
