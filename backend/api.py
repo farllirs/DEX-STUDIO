@@ -295,10 +295,15 @@ class API:
     def load_module(self, name):
         try:
             modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            ext_js = os.path.join(modules_dir, name, 'extension.dex.js')
             main_js = os.path.join(modules_dir, name, 'main.js')
-            if not os.path.exists(main_js):
+            if os.path.exists(ext_js):
+                js_path = ext_js
+            elif os.path.exists(main_js):
+                js_path = main_js
+            else:
                 return {'success': False, 'error': f'Módulo "{name}" no encontrado'}
-            with open(main_js, 'r', encoding='utf-8') as f:
+            with open(js_path, 'r', encoding='utf-8') as f:
                 code = f.read()
             valid = code.strip().endswith('// Dex code successful')
             return {'success': True, 'code': code, 'valid': valid}
@@ -475,6 +480,219 @@ class API:
                 return {'success': False, 'error': 'Extensión no encontrada'}
             shutil.rmtree(ext_dir)
             return {'success': True, 'message': f'Extensión "{ext_id}" desinstalada'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def compile_zip(self):
+        """Package current project as .zip"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay un proyecto abierto.'}
+        try:
+            import zipfile
+            project_name = os.path.basename(self.current_project_path)
+            build_dir = os.path.join(self.current_project_path, 'build')
+            os.makedirs(build_dir, exist_ok=True)
+            zip_path = os.path.join(build_dir, project_name + '.zip')
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(self.current_project_path):
+                    # Skip build dir and hidden dirs
+                    dirs[:] = [d for d in dirs if d != 'build' and not d.startswith('.')]
+                    for file in files:
+                        if file.startswith('.'):
+                            continue
+                        full_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(full_path, self.current_project_path)
+                        zf.write(full_path, os.path.join(project_name, arc_name))
+            return {'success': True, 'message': f'ZIP creado: {zip_path}', 'path': zip_path}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def compile_tar(self):
+        """Package current project as .tar.gz"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay un proyecto abierto.'}
+        try:
+            import tarfile
+            project_name = os.path.basename(self.current_project_path)
+            build_dir = os.path.join(self.current_project_path, 'build')
+            os.makedirs(build_dir, exist_ok=True)
+            tar_path = os.path.join(build_dir, project_name + '.tar.gz')
+            with tarfile.open(tar_path, 'w:gz') as tf:
+                for root, dirs, files in os.walk(self.current_project_path):
+                    dirs[:] = [d for d in dirs if d != 'build' and not d.startswith('.')]
+                    for file in files:
+                        if file.startswith('.'):
+                            continue
+                        full_path = os.path.join(root, file)
+                        arc_name = os.path.join(project_name, os.path.relpath(full_path, self.current_project_path))
+                        tf.add(full_path, arcname=arc_name)
+            return {'success': True, 'message': f'Exportado: {tar_path}', 'path': tar_path}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_run_config(self):
+        """Get run configuration from project metadata"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay proyecto abierto'}
+        try:
+            meta_path = os.path.join(self.current_project_path, 'metadata.json')
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f:
+                    meta = json.load(f)
+                return {'success': True, 'config': meta.get('run_config', {
+                    'main_file': 'main.py',
+                    'interpreter': 'python3',
+                    'args': '',
+                    'use_terminal': False
+                })}
+            return {'success': True, 'config': {
+                'main_file': 'main.py',
+                'interpreter': 'python3',
+                'args': '',
+                'use_terminal': False
+            }}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def save_run_config(self, config):
+        """Save run configuration to project metadata"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay proyecto abierto'}
+        try:
+            meta_path = os.path.join(self.current_project_path, 'metadata.json')
+            meta = {}
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f:
+                    meta = json.load(f)
+            meta['run_config'] = config
+            with open(meta_path, 'w') as f:
+                json.dump(meta, f, indent=4)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def check_is_extension_project(self):
+        """Check if current project is an extension"""
+        if not self.current_project_path:
+            return {'success': True, 'is_extension': False}
+        manifest = os.path.join(self.current_project_path, 'manifest.json')
+        ext_js = os.path.join(self.current_project_path, 'extension.dex.js')
+        return {'success': True, 'is_extension': os.path.exists(manifest) or os.path.exists(ext_js)}
+
+    def publish_extension(self, token):
+        """Publish extension from current project to DEX-EXTENSIONS repo"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay proyecto abierto'}
+        try:
+            import urllib.request
+
+            manifest_path = os.path.join(self.current_project_path, 'manifest.json')
+            if not os.path.exists(manifest_path):
+                return {'success': False, 'error': 'No se encontró manifest.json'}
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            ext_id = manifest.get('id')
+            if not ext_id:
+                return {'success': False, 'error': 'manifest.json no tiene campo "id"'}
+
+            ext_js_path = os.path.join(self.current_project_path, 'extension.dex.js')
+            main_js_path = os.path.join(self.current_project_path, 'main.js')
+            if os.path.exists(ext_js_path):
+                js_path = ext_js_path
+            elif os.path.exists(main_js_path):
+                js_path = main_js_path
+            else:
+                return {'success': False, 'error': 'No se encontró extension.dex.js ni main.js'}
+
+            with open(js_path, 'r') as f:
+                js_content = f.read()
+
+            headers = {
+                'Authorization': f'token {token}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'DEX-STUDIO/1.0'
+            }
+
+            repo = 'farllirs/DEX-EXTENSIONS'
+
+            def upload_file(file_path_in_repo, content_str):
+                url = f'https://api.github.com/repos/{repo}/contents/{file_path_in_repo}'
+                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                sha = None
+                try:
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        existing = json.loads(resp.read().decode('utf-8'))
+                        sha = existing.get('sha')
+                except:
+                    pass
+                body = {
+                    'message': f'Publish extension: {manifest.get("name", ext_id)}',
+                    'content': encoded
+                }
+                if sha:
+                    body['sha'] = sha
+                data = json.dumps(body).encode('utf-8')
+                req = urllib.request.Request(url, data=data, headers=headers, method='PUT')
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    return json.loads(resp.read().decode('utf-8'))
+
+            upload_file(f'extensions/{ext_id}/main.js', js_content)
+
+            with open(manifest_path, 'r') as f:
+                manifest_content = f.read()
+            upload_file(f'extensions/{ext_id}/manifest.json', manifest_content)
+
+            readme_path = os.path.join(self.current_project_path, 'README.md')
+            if os.path.exists(readme_path):
+                with open(readme_path, 'r') as f:
+                    readme_content = f.read()
+                upload_file(f'extensions/{ext_id}/README.md', readme_content)
+
+            registry_url = f'https://api.github.com/repos/{repo}/contents/registry.json'
+            req = urllib.request.Request(registry_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                registry_data = json.loads(resp.read().decode('utf-8'))
+
+            registry_sha = registry_data.get('sha')
+            registry_content = base64.b64decode(registry_data['content']).decode('utf-8')
+            registry = json.loads(registry_content)
+
+            extensions_list = registry.get('extensions', [])
+            new_entry = {
+                'id': ext_id,
+                'name': manifest.get('name', ext_id),
+                'version': manifest.get('version', '1.0.0'),
+                'description': manifest.get('description', ''),
+                'author': manifest.get('author', ''),
+                'category': manifest.get('category', 'editor'),
+                'icon': manifest.get('icon', 'puzzle'),
+                'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)')
+            }
+            found = False
+            for i, ext in enumerate(extensions_list):
+                if ext.get('id') == ext_id:
+                    extensions_list[i] = new_entry
+                    found = True
+                    break
+            if not found:
+                extensions_list.append(new_entry)
+
+            registry['extensions'] = extensions_list
+            new_registry_content = json.dumps(registry, indent=4)
+
+            registry_body = {
+                'message': f'Update registry: {manifest.get("name", ext_id)}',
+                'content': base64.b64encode(new_registry_content.encode('utf-8')).decode('utf-8'),
+                'sha': registry_sha
+            }
+            data = json.dumps(registry_body).encode('utf-8')
+            req = urllib.request.Request(registry_url, data=data, headers=headers, method='PUT')
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                pass
+
+            return {'success': True, 'message': f'Extensión "{manifest.get("name", ext_id)}" publicada en DEX-EXTENSIONS'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

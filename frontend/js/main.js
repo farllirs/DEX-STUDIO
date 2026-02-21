@@ -108,7 +108,7 @@ const DEX = {
             container.appendChild(button);
         });
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     // Trigger onFileOpen hooks — returns true if an extension handled it
@@ -127,6 +127,187 @@ const DEX = {
             var h = this.extensionHandlers[id];
             if (h.onEditorInput) h.onEditorInput(editor);
         }
+    },
+
+    // ─── Extended Extension API ───
+
+    _panels: {},
+    _commands: {},
+    _fileSaveCallbacks: [],
+    _fileChangeCallbacks: [],
+    _menuItems: {},
+
+    createPanel: function(id, html, options) {
+        var container = document.getElementById('extension-panels');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'extension-panels';
+            var editorWrapper = document.querySelector('.editor-wrapper');
+            if (editorWrapper) editorWrapper.appendChild(container);
+        }
+        var existing = document.getElementById('ext-panel-' + id);
+        if (existing) existing.remove();
+
+        var panel = document.createElement('div');
+        panel.id = 'ext-panel-' + id;
+        panel.className = 'ext-custom-panel';
+        if (options && options.position === 'right') {
+            panel.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:' + (options.width || '350px') + ';background:var(--bg-secondary);border-left:1px solid var(--border);z-index:10;overflow-y:auto;padding:16px;';
+        } else {
+            panel.style.cssText = 'position:absolute;left:0;right:0;top:0;bottom:0;background:var(--bg-secondary);z-index:10;overflow-y:auto;padding:16px;';
+        }
+        panel.innerHTML = html;
+        container.appendChild(panel);
+        this._panels[id] = panel;
+
+        // Hide editor when panel is full
+        if (!options || options.position !== 'right') {
+            var editor = document.getElementById('code-editor');
+            var highlight = document.getElementById('code-highlight');
+            if (editor) editor.style.display = 'none';
+            if (highlight) highlight.style.display = 'none';
+        }
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return panel;
+    },
+
+    removePanel: function(id) {
+        var panel = this._panels[id];
+        if (panel) {
+            panel.remove();
+            delete this._panels[id];
+        }
+        // Restore editor if no panels
+        if (Object.keys(this._panels).length === 0) {
+            var editor = document.getElementById('code-editor');
+            var highlight = document.getElementById('code-highlight');
+            if (editor) editor.style.display = '';
+            if (highlight) highlight.style.display = '';
+        }
+    },
+
+    readCurrentFile: function() {
+        if (!app.currentFilePath) return null;
+        return document.getElementById('code-editor').value;
+    },
+
+    writeCurrentFile: function(content) {
+        if (!app.currentFilePath) return false;
+        document.getElementById('code-editor').value = content;
+        app.tabContents[app.currentFilePath] = content;
+        app.updateHighlight();
+        return true;
+    },
+
+    getCurrentFilePath: function() {
+        return app.currentFilePath;
+    },
+
+    getProjectPath: function() {
+        return app.currentProjectPath;
+    },
+
+    showSidebar: function(id, html) {
+        return this.createPanel(id, html, { position: 'right', width: '350px' });
+    },
+
+    registerCommand: function(id, fn) {
+        this._commands[id] = fn;
+    },
+
+    executeCommand: function(id) {
+        if (this._commands[id]) {
+            this._commands[id]();
+            return true;
+        }
+        return false;
+    },
+
+    onFileSave: function(callback) {
+        this._fileSaveCallbacks.push(callback);
+    },
+
+    onFileChange: function(callback) {
+        this._fileChangeCallbacks.push(callback);
+    },
+
+    triggerFileSave: function(path) {
+        this._fileSaveCallbacks.forEach(function(cb) { cb(path); });
+    },
+
+    triggerFileChange: function(path) {
+        this._fileChangeCallbacks.forEach(function(cb) { cb(path); });
+    },
+
+    showInputDialog: function(opts) {
+        return new Promise(function(resolve) {
+            var overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.display = 'flex';
+            overlay.innerHTML = '<div class="modal-card modal-sm" style="max-width:400px">' +
+                '<div class="modal-header"><h2>' + (opts.title || 'Entrada') + '</h2>' +
+                '<button class="modal-close" id="ext-dialog-close"><i data-lucide="x"></i></button></div>' +
+                '<div class="modal-body">' +
+                (opts.message ? '<p style="margin-bottom:12px;color:var(--text-secondary)">' + opts.message + '</p>' : '') +
+                '<input type="' + (opts.type || 'text') + '" class="form-input" id="ext-dialog-input" placeholder="' + (opts.placeholder || '') + '" value="' + (opts.defaultValue || '') + '">' +
+                '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">' +
+                '<button class="btn-secondary btn-sm" id="ext-dialog-cancel">Cancelar</button>' +
+                '<button class="btn-primary btn-sm" id="ext-dialog-ok">' + (opts.okLabel || 'Aceptar') + '</button>' +
+                '</div></div></div>';
+            document.body.appendChild(overlay);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            var input = document.getElementById('ext-dialog-input');
+            input.focus();
+            input.select();
+
+            function close(val) { overlay.remove(); resolve(val); }
+            document.getElementById('ext-dialog-ok').onclick = function() { close(input.value); };
+            document.getElementById('ext-dialog-cancel').onclick = function() { close(null); };
+            document.getElementById('ext-dialog-close').onclick = function() { close(null); };
+            input.addEventListener('keydown', function(e) { if (e.key === 'Enter') close(input.value); if (e.key === 'Escape') close(null); });
+            overlay.addEventListener('click', function(e) { if (e.target === overlay) close(null); });
+        });
+    },
+
+    getTheme: function() {
+        return {
+            ui: app.uiTheme,
+            editor: app.editorTheme
+        };
+    },
+
+    addMenuItem: function(menu, item) {
+        if (!this._menuItems[menu]) this._menuItems[menu] = [];
+        this._menuItems[menu].push(item);
+    },
+
+    showNotification: function(title, message, type, duration) {
+        app.showNotification(title, message, type, duration);
+    },
+
+    log: function(msg, isError) {
+        app.log(msg, isError);
+    },
+
+    parseMarkdown: function(md) {
+        if (!md) return '';
+        var html = md
+            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:0.9em">$1</code>')
+            .replace(/^- (.*$)/gm, '<li>$1</li>')
+            .replace(/^\d+\. (.*$)/gm, '<li>$1</li>')
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--accent)">$1</a>')
+            .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">')
+            .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-elevated);padding:12px;border-radius:8px;overflow-x:auto;font-size:0.85em">$1</pre>')
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/(<li>.*<\/li>)/s, '<ul style="padding-left:20px;margin:8px 0">$1</ul>');
+        return '<div style="line-height:1.6;color:var(--text-primary)">' + html + '</div>';
     }
 };
 
@@ -144,15 +325,19 @@ const app = {
     cmdHistory: [],
     cmdHistoryIndex: -1,
     _previewOpen: false,
+    _iconsTimer: null,
     selectedTemplate: 'GUI',
     _extensionsLoaded: false,
+    _isExtensionProject: false,
+    _extensionTestMode: false,
+    _testExtId: null,
 
     _settings: {},
 
     init: function() {
         // Defaults — will be overridden by editor-config.json when backend is ready
         this.loadThemes();
-        this.log("DEX STUDIO v1.0.0 — Creador de Apps para Linux");
+        this.log("DEX STUDIO v1.0.1 — Creador de Apps para Linux");
         document.getElementById('breadcrumb-text').textContent = 'Inicio';
 
         // Keyboard shortcuts
@@ -341,7 +526,7 @@ const app = {
             container.appendChild(card);
         });
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     log: function(msg, isError = false) {
@@ -376,7 +561,7 @@ const app = {
             '<button class="notification-close" onclick="this.parentElement.classList.add(\'notif-leaving\');setTimeout(()=>this.parentElement.remove(),250)"><i data-lucide="x" style="width:14px;height:14px"></i></button>';
 
         container.appendChild(toast);
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
 
         if (duration > 0) {
             setTimeout(function() {
@@ -501,6 +686,7 @@ const app = {
             this.showView('editor');
             this.updateRecentProjects(metadata.name, res.path);
             this.updateTerminalPrompt(metadata.name);
+            this.detectProjectType();
         } else {
             this.log(res.error, true);
             this.showNotification('Error al Crear Proyecto', res.error, 'error');
@@ -553,7 +739,7 @@ const app = {
             if (fgIdentifier) fgIdentifier.style.display = '';
         }
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
 
@@ -570,7 +756,7 @@ const app = {
             const list = document.getElementById('file-list');
             list.innerHTML = '';
             await this.buildTree(this.currentProjectPath, list, 0);
-            lucide.createIcons();
+            app._refreshIcons();
         } catch(e) {
             this.log("Error al actualizar explorador: " + e.message, true);
         }
@@ -673,7 +859,7 @@ const app = {
             li.oncontextmenu = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                app.showContextMenu(e, item.path);
+                app.showContextMenu(e, item.path, item.is_dir);
             };
 
             parentEl.appendChild(li);
@@ -695,16 +881,19 @@ const app = {
         this.refreshExplorer();
     },
 
-    showContextMenu: function(e, path) {
+    showContextMenu: function(e, path, isDir) {
         this.contextPath = path;
+        this.contextIsDir = !!isDir;
         const menu = document.getElementById('context-menu');
         menu.style.display = 'block';
         menu.style.left = e.pageX + 'px';
         menu.style.top = e.pageY + 'px';
         
-        document.addEventListener('click', () => {
-            menu.style.display = 'none';
-        }, { once: true });
+        setTimeout(() => {
+            document.addEventListener('click', () => {
+                menu.style.display = 'none';
+            }, { once: true });
+        }, 10);
     },
 
     createFile: async function() {
@@ -808,6 +997,7 @@ const app = {
                 this.showView('editor');
                 this.log('Archivo abierto: ' + path.split('/').pop());
                 DEX.updateExtButtons(path);
+                DEX.triggerFileChange(path);
             } else {
                 this.log(res.error || "Error al abrir archivo", true);
             }
@@ -961,7 +1151,7 @@ const app = {
         });
 
         document.body.appendChild(modal);
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     selectAndOpenProject: function(name, path) {
@@ -976,6 +1166,50 @@ const app = {
         this.showView('editor');
         this.updateRecentProjects(name, path);
         this.updateTerminalPrompt(name);
+        this.detectProjectType();
+    },
+
+    detectProjectType: async function() {
+        if (!this.currentProjectPath) {
+            this._isExtensionProject = false;
+            this.updateRunButton();
+            return;
+        }
+        try {
+            var res = await window.pywebview.api.check_is_extension_project();
+            this._isExtensionProject = res.success && res.is_extension;
+        } catch(e) {
+            this._isExtensionProject = false;
+        }
+        this.updateRunButton();
+    },
+
+    updateRunButton: function() {
+        var btn = document.getElementById('run-btn');
+        var icon = document.getElementById('run-btn-icon');
+        var text = document.getElementById('run-btn-text');
+        if (!btn || !icon || !text) return;
+
+        if (this._extensionTestMode) {
+            icon.setAttribute('data-lucide', 'square');
+            text.textContent = 'Terminar Prueba';
+            btn.style.background = 'var(--error, #ff453a)';
+            btn.style.color = '#fff';
+            btn.onclick = function() { app.stopTestExtension(); };
+        } else if (this._isExtensionProject) {
+            icon.setAttribute('data-lucide', 'flask-conical');
+            text.textContent = 'Probar';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.onclick = function() { app.testExtension(); };
+        } else {
+            icon.setAttribute('data-lucide', 'play');
+            text.textContent = 'Ejecutar';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.onclick = function() { app.runProject(); };
+        }
+        this._refreshIcons();
     },
 
     deleteProject: async function(path, name) {
@@ -1046,6 +1280,7 @@ const app = {
                         this.refreshExplorer();
                         this.showView('editor');
                         this.updateTerminalPrompt(p.name);
+                        this.detectProjectType();
                     };
                     container.appendChild(btn);
                 });
@@ -1070,13 +1305,14 @@ const app = {
                         this.refreshExplorer();
                         this.showView('editor');
                         this.updateTerminalPrompt(p.name);
+                        this.detectProjectType();
                     };
                     homeContainer.appendChild(btn);
                 });
             }
         }
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     saveFile: async function() {
@@ -1091,6 +1327,7 @@ const app = {
             if (res.success) {
                 this.log('Archivo guardado: ' + this.currentFilePath.split('/').pop());
                 this.showNotification('Guardado', this.currentFilePath.split('/').pop(), 'success', 2000);
+                DEX.triggerFileSave(this.currentFilePath);
             } else {
                 this.log(res.error || "Error al guardar", true);
             }
@@ -1121,25 +1358,42 @@ const app = {
         }
     },
 
-    runProject: async function() {
+    runProject: function() {
         if (!this.currentProjectPath) {
             this.log("Abre un proyecto primero", true);
             return;
         }
-        // Save current file before running
+        var modal = document.getElementById('run-modal');
+        if (modal) {
+            // Load current run config
+            window.pywebview.api.get_run_config().then(function(res) {
+                if (res.success && res.config) {
+                    var c = res.config;
+                    var mainEl = document.getElementById('run-main-file');
+                    var interpEl = document.getElementById('run-interpreter');
+                    var argsEl = document.getElementById('run-args');
+                    if (mainEl) mainEl.value = c.main_file || 'main.py';
+                    if (interpEl) interpEl.value = c.interpreter || 'python3';
+                    if (argsEl) argsEl.value = c.args || '';
+                }
+            }).catch(function() {});
+            modal.style.display = 'flex';
+            app._refreshIcons();
+        }
+    },
+
+    executeRun: async function() {
+        this.closeModal('run-modal');
         if (this.currentFilePath) await this.saveFile();
 
-        // Check if this is an extension project
+        // Check if extension project
         try {
-            const metaRes = await window.pywebview.api.read_file(this.currentProjectPath + '/manifest.json');
+            var metaRes = await window.pywebview.api.read_file(this.currentProjectPath + '/manifest.json');
             if (metaRes.success) {
-                // It's an extension project — copy to modules and reload
-                const manifest = JSON.parse(metaRes.content);
-                const extId = manifest.id || this.currentProjectPath.split('/').pop();
-                const modulesDir = this.currentProjectPath.replace(/\/[^/]+$/, '').replace(/DEX_Projects.*/, 'dex-studio/modules');
-                
+                var manifest = JSON.parse(metaRes.content);
+                var extId = manifest.id || this.currentProjectPath.split('/').pop();
                 this.log('▶ Instalando extensión localmente: ' + extId + '...');
-                const copyRes = await window.pywebview.api.run_command(
+                var copyRes = await window.pywebview.api.run_command(
                     'rm -rf ~/dex-studio/modules/' + extId + ' && cp -r "' + this.currentProjectPath + '" ~/dex-studio/modules/' + extId + ' 2>&1'
                 );
                 if (copyRes.success) {
@@ -1157,34 +1411,202 @@ const app = {
             }
         } catch(e) {}
 
-        // Normal project — run main.py
-        this.log("▶ Ejecutando proyecto...");
+        // Normal project - use run config
+        var mainFile = document.getElementById('run-main-file');
+        var interpreter = document.getElementById('run-interpreter');
+        var args = document.getElementById('run-args');
+        var mf = (mainFile && mainFile.value) ? mainFile.value : 'main.py';
+        var interp = (interpreter && interpreter.value) ? interpreter.value : 'python3';
+        var extraArgs = (args && args.value) ? ' ' + args.value : '';
+
+        this.log('▶ Ejecutando: ' + interp + ' ' + mf + extraArgs);
         try {
-            const res = await window.pywebview.api.run_command('cd "' + this.currentProjectPath + '" && timeout 30 python3 main.py 2>&1 || true');
+            var cmd = 'cd "' + this.currentProjectPath + '" && timeout 30 ' + interp + ' ' + mf + extraArgs + ' 2>&1 || true';
+            var res = await window.pywebview.api.run_command(cmd);
             if (res.success) {
                 if (res.stdout) this.log(res.stdout);
                 if (res.stderr) this.log(res.stderr, true);
-                if (res.code === 0) this.log("✓ Ejecución completada");
-                else if (res.code === 124) this.log("⚠ Timeout: el proceso tardó más de 30s", true);
-                else this.log("⚠ Proceso terminó con código: " + res.code, true);
+                if (res.code === 0) this.log('✓ Ejecución completada');
+                else if (res.code === 124) this.log('⚠ Timeout: el proceso tardó más de 30s', true);
+                else this.log('⚠ Proceso terminó con código: ' + res.code, true);
             } else {
-                this.log(res.error || "Error al ejecutar", true);
+                this.log(res.error || 'Error al ejecutar', true);
             }
         } catch(e) {
-            this.log("Error: " + e.message, true);
+            this.log('Error: ' + e.message, true);
         }
     },
 
-    compileProject: async function() {
-        if (!this.currentProjectPath) return;
+    saveRunConfig: async function() {
+        var mainFile = document.getElementById('run-main-file');
+        var interpreter = document.getElementById('run-interpreter');
+        var args = document.getElementById('run-args');
+        var config = {
+            main_file: mainFile ? mainFile.value : 'main.py',
+            interpreter: interpreter ? interpreter.value : 'python3',
+            args: args ? args.value : '',
+            use_terminal: false
+        };
+        var res = await window.pywebview.api.save_run_config(config);
+        if (res.success) {
+            this.log('✓ Configuración de ejecución guardada');
+            this.showNotification('Guardado', 'Configuración de ejecución guardada', 'success', 2000);
+        } else {
+            this.log(res.error, true);
+        }
+    },
+
+    compileProject: function() {
+        if (!this.currentProjectPath) {
+            this.log('Abre un proyecto primero', true);
+            return;
+        }
+        var modal = document.getElementById('compile-modal');
+        if (modal) {
+            var metaPath = this.currentProjectPath + '/manifest.json';
+            var publishBtn = document.getElementById('compile-publish-btn');
+            window.pywebview.api.read_file(metaPath).then(function(res) {
+                var recEl = document.getElementById('compile-recommended');
+                if (res.success) {
+                    if (recEl) recEl.textContent = 'Recomendado: Empaquetar .zip (Extensión)';
+                    if (publishBtn) publishBtn.style.display = '';
+                } else {
+                    if (recEl) recEl.textContent = 'Recomendado: Compilar .deb (Aplicación)';
+                    if (publishBtn) publishBtn.style.display = 'none';
+                }
+            }).catch(function() {});
+            modal.style.display = 'flex';
+            app._refreshIcons();
+        }
+    },
+
+    compileDeb: async function() {
+        this.closeModal('compile-modal');
         this.log("Iniciando motor de empaquetado nativo (.deb)...");
         const res = await window.pywebview.api.compile_project();
         if (res.success) {
-            this.log(`ÉXITO: ${res.message}`);
+            this.log('ÉXITO: ' + res.message);
             this.showNotification('Compilación Exitosa', res.message, 'success');
         } else {
             this.log(res.error, true);
             this.showNotification('Error de Compilación', res.error, 'error');
+        }
+    },
+
+    compileZip: async function() {
+        this.closeModal('compile-modal');
+        this.log("Empaquetando como .zip...");
+        const res = await window.pywebview.api.compile_zip();
+        if (res.success) {
+            this.log('ÉXITO: ' + res.message);
+            this.showNotification('ZIP Creado', res.message, 'success');
+        } else {
+            this.log(res.error, true);
+            this.showNotification('Error', res.error, 'error');
+        }
+    },
+
+    compileTar: async function() {
+        this.closeModal('compile-modal');
+        this.log("Exportando proyecto como .tar.gz...");
+        const res = await window.pywebview.api.compile_tar();
+        if (res.success) {
+            this.log('ÉXITO: ' + res.message);
+            this.showNotification('Exportado', res.message, 'success');
+        } else {
+            this.log(res.error, true);
+            this.showNotification('Error', res.error, 'error');
+        }
+    },
+
+    testExtension: async function() {
+        if (!this.currentProjectPath) {
+            this.log('Abre un proyecto de extensión primero', true);
+            return;
+        }
+        if (this.currentFilePath) await this.saveFile();
+
+        try {
+            var metaRes = await window.pywebview.api.read_file(this.currentProjectPath + '/manifest.json');
+            if (!metaRes.success) {
+                this.log('No se encontró manifest.json', true);
+                return;
+            }
+            var manifest = JSON.parse(metaRes.content);
+            var extId = manifest.id || this.currentProjectPath.split('/').pop();
+            var tempId = '_temp_test';
+
+            this.log('🧪 Instalando extensión en modo prueba: ' + extId + '...');
+            var copyRes = await window.pywebview.api.run_command(
+                'rm -rf ~/dex-studio/modules/' + tempId + ' && cp -r "' + this.currentProjectPath + '" ~/dex-studio/modules/' + tempId + ' 2>&1'
+            );
+            if (copyRes.success) {
+                this._extensionsLoaded = false;
+                DEX.extensions = {};
+                DEX.extensionHandlers = {};
+                DEX.uiButtons = [];
+                await this.loadExtensions();
+                this._extensionTestMode = true;
+                this._testExtId = tempId;
+                this.updateRunButton();
+                this.showNotification('Modo Prueba', 'Extensión "' + (manifest.name || extId) + '" en modo prueba', 'info');
+                this.log('🧪 Extensión en modo prueba — presiona "Terminar Prueba" para finalizar');
+            } else {
+                this.log('Error: ' + (copyRes.error || ''), true);
+            }
+        } catch(e) {
+            this.log('Error: ' + e.message, true);
+        }
+    },
+
+    stopTestExtension: async function() {
+        if (!this._extensionTestMode) return;
+        var tempId = this._testExtId || '_temp_test';
+
+        this.log('⏹ Finalizando modo prueba...');
+        try {
+            await window.pywebview.api.run_command('rm -rf ~/dex-studio/modules/' + tempId + ' 2>&1');
+            this._extensionsLoaded = false;
+            DEX.extensions = {};
+            DEX.extensionHandlers = {};
+            DEX.uiButtons = [];
+            await this.loadExtensions();
+        } catch(e) {}
+
+        this._extensionTestMode = false;
+        this._testExtId = null;
+        this.updateRunButton();
+        this.showNotification('Prueba Finalizada', 'La extensión temporal fue eliminada', 'info');
+        this.log('✓ Modo prueba finalizado');
+    },
+
+    publishExtension: async function() {
+        this.closeModal('compile-modal');
+        if (!this.currentProjectPath) {
+            this.log('Abre un proyecto primero', true);
+            return;
+        }
+        var token = this._settings.github_token;
+        if (!token) {
+            token = prompt('Se necesita un token de GitHub para publicar.\n\nIntroduce tu token de acceso personal:\n(Crea uno en https://github.com/settings/tokens con permisos "repo")');
+            if (!token) return;
+            this._settings.github_token = token;
+            this.persistSettings();
+        }
+        if (!confirm('¿Publicar esta extensión al repositorio DEX-EXTENSIONS?\n\nSe subirá a GitHub y estará disponible en el marketplace.')) return;
+
+        this.log('📤 Publicando extensión...');
+        try {
+            var res = await window.pywebview.api.publish_extension(token);
+            if (res.success) {
+                this.log('✓ ' + res.message);
+                this.showNotification('Publicada', res.message, 'success');
+            } else {
+                this.log(res.error, true);
+                this.showNotification('Error al Publicar', res.error, 'error');
+            }
+        } catch(e) {
+            this.log('Error: ' + e.message, true);
         }
     },
 
@@ -1211,7 +1633,7 @@ const app = {
             panel.classList.add('console-hidden');
             if (toggle) toggle.setAttribute('data-lucide', 'chevron-up');
         }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     toggleThemeMenu: function() {
@@ -1368,17 +1790,24 @@ const app = {
 
     showHelp: function() {
         document.getElementById('help-modal').style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
         this.log('Ayuda abierta');
     },
 
     showMoreOptions: function() {
         document.getElementById('options-modal').style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     closeModal: function(id) {
         document.getElementById(id).style.display = 'none';
+    },
+
+    _refreshIcons: function() {
+        if (this._iconsTimer) clearTimeout(this._iconsTimer);
+        this._iconsTimer = setTimeout(function() {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }, 30);
     },
 
     clearRecentProjects: function() {
@@ -1408,7 +1837,7 @@ const app = {
 
     showGitMenu: function() {
         document.getElementById('git-modal').style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
     },
 
     openEditorRepo: function() {
@@ -1518,7 +1947,7 @@ const app = {
                 container.appendChild(card);
             });
 
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            app._refreshIcons();
             this.log('✓ ' + allExts.length + ' extensiones encontradas');
         } catch(e) {
             this.log('Error: ' + e.message, true);
@@ -1548,7 +1977,7 @@ const app = {
         const readmeEl = document.getElementById('ext-detail-readme');
         readmeEl.innerHTML = '<p class="empty-state">Cargando README...</p>';
         modal.style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        app._refreshIcons();
 
         try {
             const res = await window.pywebview.api.fetch_extension_readme(ext.id);
@@ -1607,7 +2036,7 @@ const app = {
 
     createFileInFolder: async function(path) {
         if (!path) return;
-        const dir = await this._resolveDir(path);
+        const dir = this._resolveDir(path);
         const name = prompt('Nombre del nuevo archivo:');
         if (!name) return;
         try {
@@ -1627,7 +2056,7 @@ const app = {
 
     createFolderInFolder: async function(path) {
         if (!path) return;
-        const dir = await this._resolveDir(path);
+        const dir = this._resolveDir(path);
         const name = prompt('Nombre de la nueva carpeta:');
         if (!name) return;
         try {
@@ -1678,11 +2107,8 @@ const app = {
         }
     },
 
-    _resolveDir: async function(path) {
-        try {
-            const res = await window.pywebview.api.list_directory(path);
-            if (res.success) return path;
-        } catch(e) {}
+    _resolveDir: function(path) {
+        if (this.contextIsDir) return path;
         return path.substring(0, path.lastIndexOf('/'));
     },
 
@@ -1847,6 +2273,8 @@ const app = {
         return code;
     },
 
+    _hlTimer: null,
+
     updateHighlight: function() {
         var editor = document.getElementById('code-editor');
         var highlight = document.getElementById('code-highlight');
@@ -1854,10 +2282,15 @@ const app = {
         var code = editor.value;
         var lang = this._hlLang;
         var html = this.highlightCode(code, lang);
-        // Add trailing newline so pre height matches textarea
         highlight.innerHTML = html + '\n';
         highlight.scrollTop = editor.scrollTop;
         highlight.scrollLeft = editor.scrollLeft;
+    },
+
+    updateHighlightDebounced: function() {
+        if (this._hlTimer) clearTimeout(this._hlTimer);
+        var self = this;
+        this._hlTimer = setTimeout(function() { self.updateHighlight(); }, 50);
     },
 
     setupEditorHighlighting: function() {
@@ -1866,7 +2299,7 @@ const app = {
         if (!editor || !highlight) return;
 
         var self = this;
-        editor.addEventListener('input', function() { self.updateHighlight(); });
+        editor.addEventListener('input', function() { self.updateHighlightDebounced(); });
         editor.addEventListener('scroll', function() {
             highlight.scrollTop = editor.scrollTop;
             highlight.scrollLeft = editor.scrollLeft;

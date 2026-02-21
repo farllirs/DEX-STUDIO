@@ -2019,6 +2019,22 @@ textarea.form-input {
     .form-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Extension Custom Panels ──────────────────────────────────── */
+.ext-custom-panel {
+    animation: fadeIn 0.15s ease-out;
+}
+
+#extension-panels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+#extension-panels > * {
+    pointer-events: auto;
+}
+
 @media (max-width: 768px) {
     .app-container { flex-direction: column; }
 

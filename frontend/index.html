@@ -17,7 +17,7 @@
             <img src="assets/logo.png" alt="DEX STUDIO" class="sidebar-logo">
             <div>
                 <h1 class="app-title">DEX STUDIO</h1>
-                <p class="app-version">v1.0.0</p>
+                <p class="app-version">v1.0.1</p>
             </div>
         </div>
 
@@ -94,9 +94,9 @@
                 </div>
 
                 <div class="action-buttons">
-                    <button class="action-btn" onclick="app.runProject()">
-                        <i data-lucide="play"></i>
-                        <span>Ejecutar</span>
+                    <button class="action-btn" id="run-btn" onclick="app.runProject()">
+                        <i data-lucide="play" id="run-btn-icon"></i>
+                        <span id="run-btn-text">Ejecutar</span>
                     </button>
                     <button class="action-btn" onclick="app.compileProject()">
                         <i data-lucide="package"></i>
@@ -184,7 +184,7 @@
                         </div>
                     </div>
 
-                    <p class="home-footer-text">DEX STUDIO v1.0.0 — Creador de Aplicaciones para Linux</p>
+                    <p class="home-footer-text">DEX STUDIO v1.0.1 — Creador de Aplicaciones para Linux</p>
                 </div>
             </section>
 
@@ -621,7 +621,7 @@
             <div class="help-section">
                 <h3>Acerca de</h3>
                 <p style="font-size:13px;color:var(--text-secondary)">
-                    DEX STUDIO v1.0.0 — Motor PyWebView + Python
+                    DEX STUDIO v1.0.1 — Motor PyWebView + Python
                 </p>
             </div>
 
@@ -759,6 +759,88 @@
                 <div id="ext-detail-readme" class="ext-detail-readme">
                     <p class="empty-state">Cargando...</p>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Compilar ──────────────────────────────────────── -->
+<div id="compile-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-sm">
+        <div class="modal-header">
+            <h2>Compilar / Empaquetar</h2>
+            <button class="modal-close" onclick="app.closeModal('compile-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="padding:0">
+            <p id="compile-recommended" style="padding:12px 20px 0;font-size:11px;color:var(--accent);font-weight:600"></p>
+            <button class="option-row" onclick="app.compileDeb()">
+                <i data-lucide="package"></i>
+                <div>
+                    <strong>Compilar .deb</strong>
+                    <span>Empaqueta como aplicación nativa Linux</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.compileZip()">
+                <i data-lucide="archive"></i>
+                <div>
+                    <strong>Empaquetar .zip</strong>
+                    <span>Crea un archivo ZIP del proyecto</span>
+                </div>
+            </button>
+            <button class="option-row" onclick="app.compileTar()">
+                <i data-lucide="file-archive"></i>
+                <div>
+                    <strong>Exportar .tar.gz</strong>
+                    <span>Exporta el proyecto completo comprimido</span>
+                </div>
+            </button>
+            <button class="option-row" id="compile-publish-btn" style="display:none" onclick="app.publishExtension()">
+                <i data-lucide="upload"></i>
+                <div>
+                    <strong>📤 Publicar Extensión</strong>
+                    <span>Subir al repositorio DEX-EXTENSIONS en GitHub</span>
+                </div>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Ejecutar ──────────────────────────────────────── -->
+<div id="run-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-sm">
+        <div class="modal-header">
+            <h2>Ejecutar Proyecto</h2>
+            <button class="modal-close" onclick="app.closeModal('run-modal')">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Archivo principal</label>
+                <input type="text" id="run-main-file" value="main.py" class="form-input" placeholder="main.py">
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Intérprete</label>
+                <select id="run-interpreter" class="form-input">
+                    <option value="python3">Python 3</option>
+                    <option value="node">Node.js</option>
+                    <option value="bash">Bash</option>
+                    <option value="python">Python</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+                <label style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Argumentos</label>
+                <input type="text" id="run-args" value="" class="form-input" placeholder="--verbose --port 8080">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn-secondary btn-sm" onclick="app.saveRunConfig()">
+                    <i data-lucide="save"></i> Guardar Config
+                </button>
+                <button class="btn-primary btn-sm" onclick="app.executeRun()">
+                    <i data-lucide="play"></i> Ejecutar
+                </button>
             </div>
         </div>
     </div>
