@@ -8,6 +8,16 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
+
+<!-- ── Splash Screen ─────────────────────────────────────────── -->
+<div id="splash-screen">
+    <img src="../dex-icon.png" id="splash-logo">
+    <div id="splash-title">DEX STUDIO</div>
+    <div id="splash-sub">Creador de Aplicaciones para Linux</div>
+    <div id="splash-bar"><div id="splash-progress"></div></div>
+    <div id="splash-status">Iniciando...</div>
+</div>
+
 <div class="app-container">
 
     <!-- ── Sidebar ──────────────────────────────────────────── -->
@@ -17,41 +27,33 @@
             <img src="assets/logo.png" alt="DEX STUDIO" class="sidebar-logo">
             <div>
                 <h1 class="app-title">DEX STUDIO</h1>
-                <p class="app-version">v1.0.1</p>
+                <p class="app-version">v1.0.2</p>
             </div>
         </div>
 
         <nav class="sidebar-nav">
 
-            <div class="nav-section">
-                <p class="nav-section-title">General</p>
-                <button class="nav-item active" onclick="app.showView('home')" data-view="home">
+            <div class="nav-section nav-section-icons">
+                <button class="nav-item active" onclick="app.showView('home')" data-view="home" title="Inicio">
                     <i data-lucide="home"></i>
-                    <span>Inicio</span>
                 </button>
-                <button class="nav-item" onclick="app.showView('new')" data-view="new">
+                <button class="nav-item" onclick="app.showView('new')" data-view="new" title="Nuevo Proyecto">
                     <i data-lucide="file-plus"></i>
-                    <span>Nuevo Proyecto</span>
                 </button>
-                <button class="nav-item" onclick="app.openProject()" data-view="open">
+                <button class="nav-item" onclick="app.openProject()" data-view="open" title="Abrir Proyecto">
                     <i data-lucide="folder-open"></i>
-                    <span>Abrir Proyecto</span>
                 </button>
             </div>
 
-            <div class="nav-section">
-                <p class="nav-section-title">Herramientas</p>
-                <button class="nav-item" onclick="app.showView('editor')" data-view="editor">
+            <div class="nav-section nav-section-icons">
+                <button class="nav-item" onclick="app.showView('editor')" data-view="editor" title="Editor">
                     <i data-lucide="code-2"></i>
-                    <span>Editor</span>
                 </button>
-                <button class="nav-item" onclick="app.showView('settings')" data-view="settings">
+                <button class="nav-item" onclick="app.showView('settings')" data-view="settings" title="Configuración">
                     <i data-lucide="sliders-horizontal"></i>
-                    <span>Configuración</span>
                 </button>
-                <button class="nav-item" onclick="app.showView('extensions')" data-view="extensions">
+                <button class="nav-item" onclick="app.showView('extensions')" data-view="extensions" title="Extensiones">
                     <i data-lucide="puzzle"></i>
-                    <span>Extensiones</span>
                 </button>
             </div>
 
@@ -181,10 +183,13 @@
                             <div class="home-shortcut"><kbd>Ctrl+N</kbd> Nuevo archivo</div>
                             <div class="home-shortcut"><kbd>Ctrl+B</kbd> Terminal</div>
                             <div class="home-shortcut"><kbd>Ctrl+W</kbd> Cerrar pestaña</div>
+                            <div class="home-shortcut"><kbd>Ctrl+Shift+P</kbd> Paleta de Comandos</div>
+                            <div class="home-shortcut"><kbd>Ctrl+F</kbd> Buscar</div>
+                            <div class="home-shortcut"><kbd>Ctrl+D</kbd> Seleccionar siguiente</div>
                         </div>
                     </div>
 
-                    <p class="home-footer-text">DEX STUDIO v1.0.1 — Creador de Aplicaciones para Linux</p>
+                    <p class="home-footer-text">DEX STUDIO v1.0.2 — Creador de Aplicaciones para Linux</p>
                 </div>
             </section>
 
@@ -333,10 +338,10 @@
                     <div class="explorer-header">
                         <h3>Explorador</h3>
                         <div class="explorer-actions">
-                            <button onclick="app.createFile()" title="Nuevo archivo">
+                            <button onclick="app.createFileInFolder(app.currentProjectPath)" title="Nuevo archivo">
                                 <i data-lucide="file-plus"></i>
                             </button>
-                            <button onclick="app.createFolder()" title="Nueva carpeta">
+                            <button onclick="app.createFolderInFolder(app.currentProjectPath)" title="Nueva carpeta">
                                 <i data-lucide="folder-plus"></i>
                             </button>
                             <button onclick="app.refreshExplorer()" title="Actualizar">
@@ -353,12 +358,27 @@
                         <span id="current-file" class="file-info">Ningún archivo abierto</span>
                         <div class="editor-actions">
                             <span id="ext-buttons"></span>
+                            <span class="ln-col-indicator" id="ln-col-indicator">Ln 1, Col 1</span>
                             <button onclick="app.saveFile()" class="btn-small" title="Guardar (Ctrl+S)">
                                 <i data-lucide="save"></i> Guardar
                             </button>
                         </div>
                     </div>
                     <div class="editor-wrapper">
+                        <div id="search-replace-panel" class="search-replace-panel" style="display:none">
+                            <div class="sr-row">
+                                <input type="text" id="sr-search-input" placeholder="Buscar..." autocomplete="off">
+                                <span class="sr-count" id="sr-count">0/0</span>
+                                <button class="sr-btn" onclick="app.searchPrev()" title="Anterior">▲</button>
+                                <button class="sr-btn" onclick="app.searchNext()" title="Siguiente">▼</button>
+                                <button class="sr-btn" onclick="app.hideSearchReplace()" title="Cerrar">✕</button>
+                            </div>
+                            <div class="sr-row" id="sr-replace-row">
+                                <input type="text" id="sr-replace-input" placeholder="Reemplazar..." autocomplete="off">
+                                <button class="sr-btn" onclick="app.replaceOne()">Uno</button>
+                                <button class="sr-btn" onclick="app.replaceAll()">Todos</button>
+                            </div>
+                        </div>
                         <pre id="code-highlight" class="code-highlight" aria-hidden="true"></pre>
                         <textarea id="code-editor" spellcheck="false" class="code-editor"
                             placeholder="Abre un archivo del explorador para comenzar a editar..."></textarea>
@@ -371,6 +391,10 @@
                         <div id="preview-panel" class="preview-panel" style="display:none">
                             <iframe id="preview-iframe" class="preview-iframe"
                                 sandbox="allow-scripts allow-same-origin"></iframe>
+                        </div>
+                        <div class="minimap-container" id="minimap-container" onclick="app.minimapClick(event)">
+                            <canvas class="minimap-canvas" id="minimap-canvas"></canvas>
+                            <div class="minimap-viewport" id="minimap-viewport"></div>
                         </div>
                     </div>
                 </div>
@@ -462,6 +486,22 @@
 
                         <div class="settings-card">
                             <div class="settings-card-header">
+                                <i data-lucide="zap"></i>
+                                <h3>Rendimiento</h3>
+                            </div>
+                            <div class="settings-content">
+                                <div class="setting-item" style="display:flex;justify-content:space-between;align-items:center">
+                                    <div>
+                                        <label>Modo Rendimiento (Lite)</label>
+                                        <p class="setting-description">Desactiva animaciones, blur y transparencias</p>
+                                    </div>
+                                    <input type="checkbox" id="lite-mode-toggle" onchange="app.toggleLiteMode()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <div class="settings-card-header">
                                 <i data-lucide="info"></i>
                                 <h3>Acerca de</h3>
                             </div>
@@ -478,45 +518,47 @@
                 </div>
             </section>
 
-            <!-- ── View: Extensiones ─────────────────────────── -->
+            <!-- ── View: Extensiones (VS Code Style) ─────────── -->
             <section id="view-extensions" class="view-section">
-                <div class="view-container">
-                    <div class="view-header">
-                        <h2>Extensiones</h2>
-                        <p>Gestiona y descarga extensiones para DEX STUDIO</p>
+                <div class="ext-v2-container">
+                    <!-- Barra de búsqueda global -->
+                    <div class="ext-v2-searchbar">
+                        <i data-lucide="search" class="ext-v2-search-icon"></i>
+                        <input type="text" id="ext-v2-search" class="form-input" placeholder="Buscar extensiones en Marketplace o Instaladas...">
                     </div>
 
-                    <div class="ext-section">
-                        <div class="ext-section-header">
-                            <h3><i data-lucide="check-circle"></i> Extensiones Instaladas</h3>
-                        </div>
-                        <!-- El JS carga las extensiones instaladas en este contenedor -->
-                        <div id="installed-extensions" class="extensions-grid">
-                            <p class="empty-state">Cargando extensiones...</p>
-                        </div>
+                    <!-- Tabs: Instaladas / Marketplace -->
+                    <div class="ext-v2-tabs">
+                        <button class="ext-v2-tab active" data-tab="installed" onclick="app.switchExtTab('installed')">
+                            <i data-lucide="check-circle" style="width:14px;height:14px"></i>
+                            Instaladas
+                            <span class="ext-v2-tab-count" id="ext-v2-installed-count">0</span>
+                        </button>
+                        <button class="ext-v2-tab" data-tab="marketplace" onclick="app.switchExtTab('marketplace')">
+                            <i data-lucide="store" style="width:14px;height:14px"></i>
+                            Marketplace
+                        </button>
                     </div>
 
-                    <div class="ext-section" style="margin-top:32px">
-                        <div class="ext-section-header">
-                            <h3><i data-lucide="download"></i> Descargar Extensiones</h3>
-                        </div>
-                        <!-- El JS puede también poblar este contenedor dinámicamente -->
-                        <div id="available-extensions" class="extensions-grid">
-                            <div class="ext-download-card">
-                                <div class="ext-download-icon">
-                                    <i data-lucide="globe"></i>
-                                </div>
-                                <div class="ext-info">
-                                    <h4>Repositorio de Extensiones</h4>
-                                    <p>Busca y descarga extensiones creadas por la comunidad</p>
-                                </div>
-                                <button class="btn-secondary btn-sm" onclick="app.openExtRepo()">
-                                    <i data-lucide="external-link"></i> Abrir
-                                </button>
+                    <!-- Panel: Instaladas -->
+                    <div class="ext-v2-panel active" id="ext-v2-panel-installed">
+                        <div id="installed-extensions" class="ext-v2-list">
+                            <div class="ext-v2-empty">
+                                <i data-lucide="puzzle" style="width:32px;height:32px;color:var(--text-tertiary)"></i>
+                                <p>No hay extensiones instaladas</p>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Panel: Marketplace -->
+                    <div class="ext-v2-panel" id="ext-v2-panel-marketplace">
+                        <div id="available-extensions" class="ext-v2-list">
+                            <div class="ext-v2-empty">
+                                <i data-lucide="globe" style="width:32px;height:32px;color:var(--text-tertiary)"></i>
+                                <p>Haz click en <strong>Marketplace</strong> para cargar extensiones de la comunidad</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -525,7 +567,10 @@
         <!-- ── Terminal ──────────────────────────────────────── -->
         <div id="bottom-panel" class="console-panel console-visible">
             <div class="console-header">
-                <span class="console-title">Terminal</span>
+                <div class="terminal-tabs" id="terminal-tabs">
+                    <button class="terminal-tab active" data-term="0">Terminal 1</button>
+                    <button class="terminal-tab-add" onclick="app.addTerminal()" title="Nueva terminal">+</button>
+                </div>
                 <div class="console-controls">
                     <button onclick="app.copyLastLog()" title="Copiar" class="console-btn">
                         <i data-lucide="copy"></i>
@@ -593,6 +638,10 @@
                     <div class="shortcut-item"><kbd>Ctrl B</kbd><span>Toggle terminal</span></div>
                     <div class="shortcut-item"><kbd>Ctrl W</kbd><span>Cerrar pestaña</span></div>
                     <div class="shortcut-item"><kbd>Ctrl `</kbd><span>Focus terminal</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl Shift P</kbd><span>Paleta de Comandos</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl F</kbd><span>Buscar</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl H</kbd><span>Buscar y Reemplazar</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl D</kbd><span>Siguiente ocurrencia</span></div>
                 </div>
             </div>
 
@@ -621,7 +670,7 @@
             <div class="help-section">
                 <h3>Acerca de</h3>
                 <p style="font-size:13px;color:var(--text-secondary)">
-                    DEX STUDIO v1.0.1 — Motor PyWebView + Python
+                    DEX STUDIO v1.0.2 — Motor PyWebView + Python
                 </p>
             </div>
 
@@ -800,7 +849,7 @@
                 <i data-lucide="upload"></i>
                 <div>
                     <strong>📤 Publicar Extensión</strong>
-                    <span>Subir al repositorio DEX-EXTENSIONS en GitHub</span>
+                    <span>Publicar en tu repo de GitHub y registrar en el marketplace</span>
                 </div>
             </button>
         </div>
@@ -843,6 +892,40 @@
                 </button>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- ── Modal: Diff ───────────────────────────────────────────── -->
+<div id="diff-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-lg">
+        <div class="modal-header">
+            <h2>Git Diff</h2>
+            <button class="modal-close" onclick="app.closeModal('diff-modal')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="diff-content" id="diff-content">Sin cambios</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Debug Panel ───────────────────────────────────────────── -->
+<div id="debug-panel" class="debug-panel" style="display:none">
+    <div class="debug-toolbar">
+        <button class="dbg-btn" onclick="app.startDebug()"><i data-lucide="play" style="width:12px;height:12px"></i> Debug</button>
+        <button class="dbg-btn" onclick="app.stopDebug()"><i data-lucide="square" style="width:12px;height:12px"></i> Stop</button>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-tertiary)" id="debug-status">Idle</span>
+    </div>
+    <div class="debug-vars" id="debug-vars">
+        <p style="color:var(--text-tertiary);font-size:11px">Ejecuta un debug para ver variables</p>
+    </div>
+</div>
+
+<!-- ── Command Palette ───────────────────────────────────────── -->
+<div id="command-palette" class="cmd-palette-overlay" style="display:none">
+    <div class="cmd-palette-box">
+        <input type="text" class="cmd-palette-input" id="cmd-palette-input"
+            placeholder="Escribe un comando..." autocomplete="off" spellcheck="false">
+        <div class="cmd-palette-list" id="cmd-palette-list"></div>
     </div>
 </div>
 

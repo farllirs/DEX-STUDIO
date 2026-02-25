@@ -3,6 +3,67 @@
    Design System: Minimal, refined, clean like macOS / SF Design
    ============================================================ */
 
+/* ── Splash Screen ───────────────────────────────────────────── */
+#splash-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: #111113;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+#splash-screen.splash-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+#splash-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 18px;
+    object-fit: contain;
+    margin-bottom: 8px;
+    animation: splash-pulse 1.8s ease-in-out infinite;
+}
+@keyframes splash-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.06); opacity: 0.85; }
+}
+#splash-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: 1px;
+}
+#splash-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 16px;
+}
+#splash-bar {
+    width: 200px;
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+#splash-progress {
+    width: 0%;
+    height: 100%;
+    background: #0a84ff;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+#splash-status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 4px;
+}
+
 /* ── Reset & Box Model ───────────────────────────────────────── */
 *, *::before, *::after {
     margin: 0;
@@ -264,6 +325,33 @@ body {
     height: 16px;
     flex-shrink: 0;
     opacity: 0.85;
+}
+
+.nav-section-icons {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 4px 6px;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+
+.nav-section-icons .nav-item {
+    justify-content: flex-start;
+    padding: 9px 12px;
+    gap: 0;
+}
+
+.nav-section-icons .nav-item i {
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+}
+
+.nav-section-icons .nav-item.active i,
+.nav-section-icons .nav-item:hover i {
+    opacity: 1;
 }
 
 .recent-list {
@@ -1072,17 +1160,26 @@ textarea.form-input {
 /* ── Console ─────────────────────────────────────────────────── */
 .console-panel {
     height: 192px;
+    min-height: 0;
     background: var(--bg-surface);
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
     transition: height var(--duration-slow) var(--ease-out);
+    position: relative;
+    z-index: 5;
 }
 
 .console-panel.console-hidden {
-    height: 0;
+    height: 36px;
     overflow: hidden;
-    border: none;
+    border-top: 1px solid var(--border);
+}
+
+.console-panel.console-hidden .console-output,
+.console-panel.console-hidden .terminal-input-row {
+    display: none;
 }
 
 .console-header {
@@ -1093,6 +1190,8 @@ textarea.form-input {
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
+    position: relative;
+    z-index: 6;
 }
 
 .console-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
@@ -1100,8 +1199,8 @@ textarea.form-input {
 .console-controls { display: flex; gap: 6px; }
 
 .console-btn {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -1111,6 +1210,16 @@ textarea.form-input {
     align-items: center;
     justify-content: center;
     transition: background var(--duration-fast), color var(--duration-fast);
+    pointer-events: auto;
+    position: relative;
+    z-index: 7;
+}
+
+.console-btn i,
+.console-btn svg {
+    pointer-events: none;
+    width: 14px;
+    height: 14px;
 }
 
 .console-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
@@ -1295,66 +1404,403 @@ textarea.form-input {
     flex-shrink: 0;
 }
 
-/* ── Extension Sections ──────────────────────────────────────── */
-.ext-section { margin-bottom: 24px; }
-
-.ext-section-header { margin-bottom: 14px; }
-
-.ext-section-header h3 {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
+/* ── Extension V2 Layout (VS Code Style) ─────────────────────── */
+.ext-v2-container {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
 }
 
-.ext-section-header h3 i { width: 16px; height: 16px; color: var(--accent); }
+.ext-v2-searchbar {
+    position: relative;
+    padding: 12px 16px 0;
+    flex-shrink: 0;
+}
 
-.ext-card-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.ext-v2-search-icon {
+    position: absolute;
+    left: 28px;
+    top: 50%;
+    transform: translateY(-25%);
+    width: 14px;
+    height: 14px;
+    color: var(--text-tertiary);
+    pointer-events: none;
+}
 
-.ext-toggle-btn {
-    padding: 4px 10px;
-    font-size: 11px;
-    border-radius: var(--radius-sm);
+.ext-v2-searchbar .form-input {
+    padding-left: 34px;
+    font-size: 13px;
+    background: var(--bg-elevated);
     border: 1px solid var(--border);
-    background: var(--bg-elevated);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-family: inherit;
-    transition: border-color var(--duration-fast), color var(--duration-fast);
-}
-
-.ext-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
-.ext-toggle-btn.ext-disable:hover { border-color: var(--warning); color: var(--warning); }
-.ext-toggle-btn.ext-uninstall:hover { border-color: var(--error); color: var(--error); }
-
-.ext-download-card {
-    background: var(--bg-surface);
-    border: 1.5px dashed var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    transition: border-color var(--duration-fast);
-}
-
-.ext-download-card:hover { border-color: var(--accent); }
-
-.ext-download-icon {
-    width: 40px;
-    height: 40px;
     border-radius: var(--radius-md);
+    width: 100%;
+    height: 36px;
+}
+
+.ext-v2-searchbar .form-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.ext-v2-tabs {
+    display: flex;
+    gap: 0;
+    padding: 8px 16px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.ext-v2-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.ext-v2-tab:hover {
+    color: var(--text-primary);
+}
+
+.ext-v2-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.ext-v2-tab-count {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 600;
+    min-width: 18px;
+    text-align: center;
+}
+
+.ext-v2-panel {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+}
+
+.ext-v2-panel.active {
+    display: block;
+}
+
+.ext-v2-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ext-v2-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+
+/* ── Extension Card V2 (lista estilo VS Code) ───────────────── */
+.ext-v2-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.12s;
+    position: relative;
+}
+
+.ext-v2-card:hover {
     background: var(--bg-elevated);
+}
+
+.ext-v2-card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    color: white;
+    font-size: 14px;
+}
+
+.ext-v2-card-icon i {
+    width: 18px;
+    height: 18px;
+}
+
+.ext-v2-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ext-v2-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.3;
+}
+
+.ext-v2-card-title .ext-v2-version {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-tertiary);
+}
+
+.ext-v2-card-desc {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ext-v2-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+}
+
+.ext-v2-card-meta i {
+    width: 10px;
+    height: 10px;
+}
+
+.ext-v2-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.ext-v2-btn-install {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.ext-v2-btn-install:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.ext-v2-btn-install:active {
+    transform: translateY(0);
+}
+
+.ext-v2-btn-uninstall {
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.ext-v2-btn-uninstall:hover {
+    border-color: var(--error);
+    color: var(--error);
+    background: rgba(255, 69, 58, 0.08);
+}
+
+.ext-v2-status {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.ext-v2-status-installed {
+    background: rgba(48, 209, 88, 0.12);
+    color: var(--success);
+}
+
+.ext-v2-status-active {
+    background: var(--accent-subtle);
     color: var(--accent);
 }
 
-.ext-download-icon i { width: 18px; height: 18px; }
+.ext-v2-status-disabled {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-tertiary);
+}
+
+.ext-v2-btn-enable,
+.ext-v2-btn-disable {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.ext-v2-btn-enable:hover {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(48, 209, 88, 0.08);
+}
+
+.ext-v2-btn-disable:hover {
+    border-color: var(--warning);
+    color: var(--warning);
+    background: rgba(255, 214, 10, 0.08);
+}
+
+/* ── Extension Detail V2 ────────────────────────────────────── */
+.ext-v2-detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.ext-v2-detail-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+
+.ext-v2-detail-icon i {
+    width: 28px;
+    height: 28px;
+}
+
+.ext-v2-detail-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.ext-v2-detail-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+}
+
+.ext-v2-detail-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.ext-v2-detail-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.ext-v2-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.ext-v2-detail-section {
+    margin-top: 16px;
+}
+
+.ext-v2-detail-section h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ext-v2-detail-section h4 i {
+    width: 13px;
+    height: 13px;
+    color: var(--accent);
+}
+
+.ext-v2-readme {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-height: 350px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ── Legacy support ─────────────────────────────────────── */
+.ext-section { margin-bottom: 24px; }
+.ext-card-actions { display: flex; gap: 5px; flex-shrink: 0; }
 
 /* ── Git Modal ───────────────────────────────────────────────── */
 .git-section-title {
@@ -1754,9 +2200,13 @@ textarea.form-input {
     align-items: center;
     justify-content: center;
     transition: background var(--duration-fast), color var(--duration-fast);
+    z-index: 10;
+    position: relative;
+    flex-shrink: 0;
 }
 
 .modal-close:hover { background: var(--error); color: white; }
+.modal-close i { pointer-events: none; }
 
 .modal-body { padding: 20px; overflow-y: auto; }
 
@@ -2055,4 +2505,326 @@ textarea.form-input {
 
     .editor-container { margin: 8px; }
     .view-container { padding: 16px; }
+}
+
+/* ── Lite Mode ───────────────────────────────────────────────── */
+body.lite-mode {
+    --transition-speed: 0s;
+}
+body.lite-mode .sidebar,
+body.lite-mode .top-bar,
+body.lite-mode .modal-card,
+body.lite-mode .notification-toast,
+body.lite-mode .console-panel,
+body.lite-mode .cmd-palette-overlay,
+body.lite-mode .context-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    transition: none !important;
+}
+body.lite-mode .nav-item,
+body.lite-mode .action-btn,
+body.lite-mode .btn-primary,
+body.lite-mode .btn-secondary,
+body.lite-mode .editor-tab,
+body.lite-mode .extension-card,
+body.lite-mode .template-card,
+body.lite-mode .settings-card,
+body.lite-mode .option-row,
+body.lite-mode .home-action-card,
+body.lite-mode .file-item,
+body.lite-mode .context-item,
+body.lite-mode .console-btn,
+body.lite-mode .terminal-tab,
+body.lite-mode .sr-btn,
+body.lite-mode .cmd-palette-item {
+    transition: none !important;
+    animation: none !important;
+}
+body.lite-mode .notification-toast {
+    animation: none !important;
+}
+body.lite-mode .code-highlight {
+    display: none !important;
+}
+body.lite-mode .code-editor {
+    color: var(--text-primary) !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    caret-color: var(--accent) !important;
+}
+body.lite-mode .minimap-container {
+    display: none !important;
+}
+body.lite-mode .splash-hidden {
+    transition: none !important;
+    opacity: 0 !important;
+}
+
+/* ── Command Palette ─────────────────────────────────────────── */
+.cmd-palette-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    padding-top: 80px;
+}
+.cmd-palette-box {
+    width: 520px;
+    max-height: 400px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.cmd-palette-input {
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+}
+.cmd-palette-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 4px;
+}
+.cmd-palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: background 0.1s;
+}
+.cmd-palette-item:hover,
+.cmd-palette-item.active {
+    background: var(--accent-subtle);
+}
+.cmd-palette-item .cmd-key {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    background: var(--bg-elevated);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* ── Search & Replace Panel ──────────────────────────────────── */
+.search-replace-panel {
+    position: absolute;
+    top: 0;
+    right: 20px;
+    z-index: 50;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 340px;
+}
+.search-replace-panel .sr-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.search-replace-panel input {
+    flex: 1;
+    padding: 5px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    font-family: inherit;
+}
+.search-replace-panel input:focus {
+    border-color: var(--border-focus);
+}
+.search-replace-panel .sr-btn {
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+}
+.search-replace-panel .sr-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+.search-replace-panel .sr-count {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    min-width: 50px;
+    text-align: center;
+}
+
+/* ── Ln/Col Indicator ────────────────────────────────────────── */
+.ln-col-indicator {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    padding: 0 8px;
+    white-space: nowrap;
+}
+
+/* ── Minimap ─────────────────────────────────────────────────── */
+.minimap-container {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 60px;
+    background: var(--bg-elevated);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    opacity: 0.7;
+    z-index: 5;
+}
+.minimap-container:hover { opacity: 1; }
+.minimap-canvas {
+    width: 60px;
+    height: 100%;
+}
+.minimap-viewport {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* ── Multi-terminal Tabs ─────────────────────────────────────── */
+.terminal-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px;
+}
+.terminal-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    cursor: pointer;
+}
+.terminal-tab.active {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+.terminal-tab .term-close {
+    font-size: 13px;
+    opacity: 0;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: inherit;
+    padding: 0 2px;
+}
+.terminal-tab:hover .term-close { opacity: 0.6; }
+.terminal-tab-add {
+    padding: 3px 6px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+.terminal-tab-add:hover {
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+}
+
+/* ── Diff Panel ──────────────────────────────────────────────── */
+.diff-content {
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--bg-base);
+    border-radius: var(--radius-md);
+    line-height: 1.5;
+}
+.diff-content .diff-add { color: var(--success); }
+.diff-content .diff-del { color: var(--error); }
+.diff-content .diff-hdr { color: var(--accent); font-weight: 600; }
+
+/* ── Debug Panel ─────────────────────────────────────────────── */
+.debug-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+.debug-toolbar .dbg-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.debug-toolbar .dbg-btn:hover { background: var(--accent-subtle); }
+.debug-vars {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.debug-var-row {
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border);
+}
+.debug-var-name { color: var(--accent); font-weight: 600; }
+.debug-var-value { color: var(--text-secondary); }
+.gutter-breakpoint {
+    position: absolute;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    background: var(--error);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 20;
 }

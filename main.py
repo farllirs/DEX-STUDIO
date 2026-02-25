@@ -12,8 +12,9 @@ def main():
     api = API()
     
     # Create Window
+    icon_path = os.path.join(base_dir, 'dex-icon.png')
     window = webview.create_window(
-        'DEX STUDIO - Creador de Apps para Linux',
+        'DEX STUDIO',
         url=f'file://{index_path}',
         js_api=api,
         width=1280,
@@ -22,11 +23,25 @@ def main():
         background_color='#0a0a0c'
     )
     
-    # Inject window reference into API to allow DevTools toggle
+    # Inyectar referencia de ventana en la API
     api.set_window(window)
     
+    def on_shown():
+        try:
+            import gi
+            gi.require_version('Gtk', '3.0')
+            from gi.repository import Gtk, GdkPixbuf
+            for w in Gtk.Window.list_toplevels():
+                if w.get_title() and 'DEX' in w.get_title():
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file(icon_path)
+                    w.set_icon(pixbuf)
+        except Exception:
+            pass
+    
+    window.events.shown += on_shown
+    
     # Start
-    webview.start(debug=True, gui='qt' if sys.platform == 'linux' else None)
+    webview.start(debug=False, gui='qt' if sys.platform == 'linux' else None)
 
 if __name__ == '__main__':
     main()

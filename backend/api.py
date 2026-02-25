@@ -4,7 +4,9 @@ import shutil
 import subprocess
 import re
 import base64
+import urllib.error
 from backend.packager import Packager
+from backend.extensions_db import ExtensionsDB
 
 class API:
     def __init__(self):
@@ -12,6 +14,23 @@ class API:
         self.current_project_path = None
         self.projects_root = os.path.join(os.path.expanduser("~"), 'DEX_Projects')
         os.makedirs(self.projects_root, exist_ok=True)
+        self.ext_db = ExtensionsDB()
+        self._migrate_modules_to_extensions()
+
+    def _migrate_modules_to_extensions(self):
+        """Migrate extensions from old modules/ dir to ~/.dex-studio/extensions/"""
+        try:
+            old_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            new_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            os.makedirs(new_dir, exist_ok=True)
+            if os.path.exists(old_dir):
+                for item in os.listdir(old_dir):
+                    old_path = os.path.join(old_dir, item)
+                    new_path = os.path.join(new_dir, item)
+                    if os.path.isdir(old_path) and not os.path.exists(new_path):
+                        shutil.copytree(old_path, new_path)
+        except Exception:
+            pass
 
     def set_window(self, window):
         self.window = window
@@ -209,7 +228,7 @@ class API:
     def open_project(self, path):
         try:
             path = os.path.expanduser(path)
-            if os.path.exists(os.path.join(path, 'metadata.json')):
+            if os.path.isdir(path):
                 self.current_project_path = path
                 return {'success': True}
             return {'success': False, 'error': 'No es un proyecto válido de DEX STUDIO.'}
@@ -280,7 +299,7 @@ class API:
 
     def list_modules(self):
         try:
-            modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
             if not os.path.exists(modules_dir):
                 return {'success': True, 'modules': []}
             modules = []
@@ -294,7 +313,7 @@ class API:
 
     def load_module(self, name):
         try:
-            modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
             ext_js = os.path.join(modules_dir, name, 'extension.dex.js')
             main_js = os.path.join(modules_dir, name, 'main.js')
             if os.path.exists(ext_js):
@@ -312,7 +331,7 @@ class API:
 
     def load_module_file(self, module_name, file_path):
         try:
-            modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
             full_path = os.path.realpath(os.path.join(modules_dir, module_name, file_path))
             if not full_path.startswith(os.path.realpath(modules_dir)):
                 return {'success': False, 'error': 'Acceso denegado: ruta fuera del directorio de módulos'}
@@ -369,6 +388,42 @@ class API:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def save_github_token(self, token):
+        """Save GitHub token securely in ~/.dex-studio/"""
+        try:
+            token_dir = os.path.join(os.path.expanduser("~"), '.dex-studio')
+            os.makedirs(token_dir, exist_ok=True)
+            token_path = os.path.join(token_dir, 'github_token')
+            with open(token_path, 'w') as f:
+                f.write(token.strip())
+            os.chmod(token_path, 0o600)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def load_github_token(self):
+        """Load GitHub token from ~/.dex-studio/"""
+        try:
+            token_path = os.path.join(os.path.expanduser("~"), '.dex-studio', 'github_token')
+            if os.path.exists(token_path):
+                with open(token_path, 'r') as f:
+                    token = f.read().strip()
+                if token:
+                    return {'success': True, 'token': token}
+            return {'success': True, 'token': None}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def delete_github_token(self):
+        """Delete stored GitHub token"""
+        try:
+            token_path = os.path.join(os.path.expanduser("~"), '.dex-studio', 'github_token')
+            if os.path.exists(token_path):
+                os.remove(token_path)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     # ── Extension marketplace ─────────────────────────────────────────
 
     def fetch_extension_registry(self):
@@ -384,14 +439,37 @@ class API:
             return {'success': False, 'error': str(e)}
 
     def fetch_extension_readme(self, ext_id):
-        """Fetch README.md for an extension from GitHub"""
+        """Fetch README.md for an extension — try local, then author's repo, then central"""
         try:
             import urllib.request
+            # Try local first
+            ext_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions', ext_id)
+            local_readme = os.path.join(ext_dir, 'README.md')
+            if os.path.exists(local_readme):
+                with open(local_readme, 'r', encoding='utf-8') as f:
+                    return {'success': True, 'content': f.read()}
+
+            # Try author's repo
+            ext_data = self.ext_db.get_extension(ext_id)
+            if ext_data and ext_data.get('repo_url'):
+                repo_url = ext_data['repo_url']
+                parts = repo_url.rstrip('/').split('/')
+                owner = parts[-2]
+                repo = parts[-1].replace('.git', '')
+                for branch in ['main', 'master']:
+                    try:
+                        url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/README.md'
+                        req = urllib.request.Request(url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                        with urllib.request.urlopen(req, timeout=10) as response:
+                            return {'success': True, 'content': response.read().decode('utf-8')}
+                    except:
+                        continue
+
+            # Fallback to central repo
             url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/README.md'
             req = urllib.request.Request(url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
-                content = response.read().decode('utf-8')
-            return {'success': True, 'content': content}
+                return {'success': True, 'content': response.read().decode('utf-8')}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -411,7 +489,7 @@ class API:
         """Download and install an extension from GitHub"""
         try:
             import urllib.request
-            modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
             ext_dir = os.path.join(modules_dir, ext_id)
 
             # Check if already installed
@@ -464,9 +542,25 @@ class API:
                     except:
                         pass
 
+            self.ext_db.mark_installed(ext_id)
+            self.ext_db.add_extension({
+                'id': ext_id,
+                'name': manifest.get('name', ext_id),
+                'version': manifest.get('version', '1.0.0'),
+                'description': manifest.get('description', ''),
+                'author': manifest.get('author', ''),
+                'category': manifest.get('category', 'editor'),
+                'icon': manifest.get('icon', 'puzzle'),
+                'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)')
+            })
             return {'success': True, 'message': f'Extensión "{manifest.get("name", ext_id)}" instalada correctamente'}
+        except urllib.error.HTTPError as e:
+            if os.path.exists(ext_dir):
+                shutil.rmtree(ext_dir, ignore_errors=True)
+            if e.code == 404:
+                return {'success': False, 'error': f'Error 404: Los archivos de la extensión "{ext_id}" no existen en el repositorio. Puede que la extensión no esté publicada correctamente.'}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
         except Exception as e:
-            # Clean up on failure
             if os.path.exists(ext_dir):
                 shutil.rmtree(ext_dir, ignore_errors=True)
             return {'success': False, 'error': str(e)}
@@ -474,12 +568,67 @@ class API:
     def uninstall_extension(self, ext_id):
         """Uninstall an extension"""
         try:
-            modules_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'modules')
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
             ext_dir = os.path.join(modules_dir, ext_id)
             if not os.path.exists(ext_dir):
                 return {'success': False, 'error': 'Extensión no encontrada'}
             shutil.rmtree(ext_dir)
+            self.ext_db.mark_uninstalled(ext_id)
             return {'success': True, 'message': f'Extensión "{ext_id}" desinstalada'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def toggle_extension(self, ext_id):
+        """Activa o desactiva una extensión sin desinstalarla"""
+        try:
+            is_currently_disabled = self.ext_db.is_disabled(ext_id)
+            self.ext_db.set_disabled(ext_id, not is_currently_disabled)
+            new_state = 'desactivada' if not is_currently_disabled else 'activada'
+            return {'success': True, 'message': f'Extensión "{ext_id}" {new_state}', 'disabled': not is_currently_disabled}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_installed_extensions_info(self):
+        """Retorna info completa de todas las extensiones instaladas en disco"""
+        try:
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            if not os.path.exists(modules_dir):
+                return {'success': True, 'extensions': []}
+            result = []
+            for item in sorted(os.listdir(modules_dir)):
+                ext_dir = os.path.join(modules_dir, item)
+                if not os.path.isdir(ext_dir):
+                    continue
+                ext_info = {'id': item, 'name': item, 'version': '1.0.0', 'description': '', 'author': '', 'category': 'editor', 'icon': 'puzzle', 'color': '#667eea', 'installed': True}
+                # Leer manifest.json si existe
+                manifest_path = os.path.join(ext_dir, 'manifest.json')
+                if os.path.exists(manifest_path):
+                    try:
+                        with open(manifest_path, 'r', encoding='utf-8') as f:
+                            manifest = json.load(f)
+                        ext_info.update({
+                            'name': manifest.get('name', item),
+                            'version': manifest.get('version', '1.0.0'),
+                            'description': manifest.get('description', ''),
+                            'author': manifest.get('author', ''),
+                            'category': manifest.get('category', 'editor'),
+                            'icon': manifest.get('icon', 'puzzle'),
+                            'color': manifest.get('color', '#667eea')
+                        })
+                    except Exception:
+                        pass
+                # Enriquecer con datos de la DB
+                db_data = self.ext_db.get_extension(item)
+                if db_data:
+                    ext_info['installed_at'] = db_data.get('installed_at', '')
+                    ext_info['downloads'] = db_data.get('downloads', 0)
+                    ext_info['repo_url'] = db_data.get('repo_url', '')
+                    ext_info['is_published'] = db_data.get('is_published', 0)
+                    ext_info['is_disabled'] = db_data.get('is_disabled', 0)
+                else:
+                    ext_info['is_disabled'] = 0
+                result.append(ext_info)
+            return {'success': True, 'extensions': result}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -583,6 +732,9 @@ class API:
         """Publish extension from current project to DEX-EXTENSIONS repo"""
         if not self.current_project_path:
             return {'success': False, 'error': 'No hay proyecto abierto'}
+        if not token or not token.strip():
+            return {'success': False, 'error': 'Token de GitHub vacío. Configúralo en Ajustes → GitHub Token.'}
+        token = token.strip()
         try:
             import urllib.request
 
@@ -609,7 +761,7 @@ class API:
                 js_content = f.read()
 
             headers = {
-                'Authorization': f'token {token}',
+                'Authorization': f'Bearer {token}',
                 'Content-Type': 'application/json',
                 'User-Agent': 'DEX-STUDIO/1.0'
             }
@@ -693,6 +845,643 @@ class API:
                 pass
 
             return {'success': True, 'message': f'Extensión "{manifest.get("name", ext_id)}" publicada en DEX-EXTENSIONS'}
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                return {'success': False, 'error': 'Error 403: Token sin permisos de escritura. Asegúrate de que el token tenga el scope "repo" y seas colaborador del repositorio DEX-EXTENSIONS.'}
+            elif e.code == 404:
+                return {'success': False, 'error': 'Error 404: Repositorio no encontrado. Verifica que el repositorio farllirs/DEX-EXTENSIONS existe.'}
+            elif e.code == 401:
+                return {'success': False, 'error': 'Error 401: Token inválido o expirado. Genera uno nuevo en GitHub → Settings → Personal Access Tokens.'}
+            elif e.code == 422:
+                return {'success': False, 'error': 'Error 422: Conflicto al subir. Intenta de nuevo.'}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # ── Extension system v2 ─────────────────────────────────────────
+
+    def create_github_repo(self, token, name, description=''):
+        """Create a new GitHub repository"""
+        try:
+            import urllib.request
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'DEX-STUDIO/1.0'
+            }
+            body = json.dumps({
+                'name': name,
+                'description': description,
+                'private': False,
+                'auto_init': True
+            }).encode('utf-8')
+            req = urllib.request.Request('https://api.github.com/user/repos', data=body, headers=headers, method='POST')
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                repo_data = json.loads(resp.read().decode('utf-8'))
+            return {'success': True, 'repo_url': repo_data.get('html_url')}
+        except urllib.error.HTTPError as e:
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def publish_extension_v2(self, token, repo_url=None, create_new=False, repo_name=None):
+        """Publish extension to author's own GitHub repo and update central registry"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay proyecto abierto'}
+        if not token or not token.strip():
+            return {'success': False, 'error': 'Token de GitHub vacío. Configúralo en Ajustes → GitHub Token.'}
+        token = token.strip()
+        try:
+            import urllib.request
+
+            manifest_path = os.path.join(self.current_project_path, 'manifest.json')
+            if not os.path.exists(manifest_path):
+                return {'success': False, 'error': 'No se encontró manifest.json'}
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            ext_id = manifest.get('id')
+            if not ext_id:
+                return {'success': False, 'error': 'manifest.json no tiene campo "id"'}
+
+            ext_js_path = os.path.join(self.current_project_path, 'extension.dex.js')
+            main_js_path = os.path.join(self.current_project_path, 'main.js')
+            if os.path.exists(ext_js_path):
+                js_path = ext_js_path
+            elif os.path.exists(main_js_path):
+                js_path = main_js_path
+            else:
+                return {'success': False, 'error': 'No se encontró extension.dex.js ni main.js'}
+
+            with open(js_path, 'r') as f:
+                js_content = f.read()
+
+            # Create new repo if requested
+            if create_new:
+                name = repo_name or f'dex-ext-{ext_id}'
+                result = self.create_github_repo(token, name, manifest.get('description', ''))
+                if not result.get('success'):
+                    return result
+                repo_url = result['repo_url']
+
+            if not repo_url:
+                return {'success': False, 'error': 'No se proporcionó URL del repositorio'}
+
+            # Parse owner/repo from URL
+            parts = repo_url.rstrip('/').split('/')
+            owner = parts[-2]
+            repo = parts[-1].replace('.git', '')
+
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'DEX-STUDIO/1.0'
+            }
+
+            def upload_file_to_repo(file_path_in_repo, content_str):
+                url = f'https://api.github.com/repos/{owner}/{repo}/contents/{file_path_in_repo}'
+                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                sha = None
+                try:
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        existing = json.loads(resp.read().decode('utf-8'))
+                        sha = existing.get('sha')
+                except:
+                    pass
+                body = {
+                    'message': f'Publish extension: {manifest.get("name", ext_id)}',
+                    'content': encoded
+                }
+                if sha:
+                    body['sha'] = sha
+                data = json.dumps(body).encode('utf-8')
+                req = urllib.request.Request(url, data=data, headers=headers, method='PUT')
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    return json.loads(resp.read().decode('utf-8'))
+
+            # Upload ALL project files to author's repo
+            for root, dirs, files in os.walk(self.current_project_path):
+                dirs[:] = [d for d in dirs if d != 'build' and not d.startswith('.')]
+                for fname in files:
+                    if fname.startswith('.'):
+                        continue
+                    full_path = os.path.join(root, fname)
+                    rel_path = os.path.relpath(full_path, self.current_project_path)
+                    try:
+                        with open(full_path, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                        upload_file_to_repo(rel_path, file_content)
+                    except (UnicodeDecodeError, Exception):
+                        pass
+
+            # Build entry for registry/DB
+            new_entry = {
+                'id': ext_id,
+                'name': manifest.get('name', ext_id),
+                'version': manifest.get('version', '1.0.0'),
+                'description': manifest.get('description', ''),
+                'author': manifest.get('author', ''),
+                'category': manifest.get('category', 'editor'),
+                'icon': manifest.get('icon', 'puzzle'),
+                'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
+                'repo_url': repo_url
+            }
+
+            # Try to update central registry (optional — may fail with 403 if not collaborator)
+            registry_updated = False
+            try:
+                central_repo = 'farllirs/DEX-EXTENSIONS'
+                registry_url = f'https://api.github.com/repos/{central_repo}/contents/registry.json'
+                req = urllib.request.Request(registry_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    registry_data = json.loads(resp.read().decode('utf-8'))
+
+                registry_sha = registry_data.get('sha')
+                registry_content = base64.b64decode(registry_data['content']).decode('utf-8')
+                registry = json.loads(registry_content)
+
+                extensions_list = registry.get('extensions', [])
+                found = False
+                for i, ext in enumerate(extensions_list):
+                    if ext.get('id') == ext_id:
+                        extensions_list[i] = new_entry
+                        found = True
+                        break
+                if not found:
+                    extensions_list.append(new_entry)
+
+                registry['extensions'] = extensions_list
+                new_registry_content = json.dumps(registry, indent=4)
+
+                registry_body = {
+                    'message': f'Update registry: {manifest.get("name", ext_id)}',
+                    'content': base64.b64encode(new_registry_content.encode('utf-8')).decode('utf-8'),
+                    'sha': registry_sha
+                }
+                data = json.dumps(registry_body).encode('utf-8')
+                req = urllib.request.Request(registry_url, data=data, headers=headers, method='PUT')
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    pass
+                registry_updated = True
+            except urllib.error.HTTPError:
+                pass
+            except Exception:
+                pass
+
+            # Register in local DB
+            self.ext_db.add_extension(new_entry)
+            self.ext_db.mark_published(ext_id, repo_url)
+
+            msg = f'Extensión "{manifest.get("name", ext_id)}" publicada en {repo_url}'
+            if not registry_updated:
+                msg += ' (registro central pendiente — se actualizará cuando un admin apruebe)'
+            return {'success': True, 'message': msg, 'repo_url': repo_url}
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                return {'success': False, 'error': 'Error 403: Token sin permisos. Verifica que el token tenga scope "repo" y que el repositorio exista y sea tuyo.'}
+            elif e.code == 404:
+                return {'success': False, 'error': 'Error 404: Repositorio no encontrado. Verifica la URL.'}
+            elif e.code == 401:
+                return {'success': False, 'error': 'Error 401: Token inválido o expirado. Genera uno nuevo en GitHub → Settings → Developer Settings → Personal Access Tokens.'}
+            elif e.code == 422:
+                return {'success': False, 'error': 'Error 422: Conflicto al subir. Intenta de nuevo.'}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def install_extension_v2(self, ext_id, repo_url=None):
+        """Download and install an extension from the author's GitHub repo"""
+        try:
+            import urllib.request
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            ext_dir = os.path.join(modules_dir, ext_id)
+
+            if os.path.exists(ext_dir):
+                return {'success': False, 'error': 'Extensión ya instalada'}
+
+            # Look up repo_url if not provided
+            if not repo_url:
+                ext_data = self.ext_db.get_extension(ext_id)
+                if ext_data and ext_data.get('repo_url'):
+                    repo_url = ext_data['repo_url']
+
+            if not repo_url:
+                # Try fetching from remote registry
+                try:
+                    reg_url = 'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/registry.json'
+                    req = urllib.request.Request(reg_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        registry = json.loads(response.read().decode('utf-8'))
+                    for ext in registry.get('extensions', []):
+                        if ext.get('id') == ext_id and ext.get('repo_url'):
+                            repo_url = ext['repo_url']
+                            break
+                except:
+                    pass
+
+            if not repo_url:
+                return {'success': False, 'error': f'No se encontró repo_url para la extensión "{ext_id}"'}
+
+            # Parse owner/repo from URL
+            parts = repo_url.rstrip('/').split('/')
+            owner = parts[-2]
+            repo = parts[-1].replace('.git', '')
+
+            os.makedirs(ext_dir, exist_ok=True)
+
+            # Detect default branch (try main, then master)
+            branch = 'main'
+            for try_branch in ['main', 'master']:
+                try:
+                    test_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{try_branch}/manifest.json'
+                    req = urllib.request.Request(test_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=8) as response:
+                        manifest = json.loads(response.read().decode('utf-8'))
+                    branch = try_branch
+                    break
+                except urllib.error.HTTPError:
+                    manifest = None
+                    continue
+
+            if not manifest:
+                if os.path.exists(ext_dir):
+                    shutil.rmtree(ext_dir, ignore_errors=True)
+                return {'success': False, 'error': f'No se encontró manifest.json en el repositorio {owner}/{repo} (branch main ni master)'}
+
+            with open(os.path.join(ext_dir, 'manifest.json'), 'w') as f:
+                json.dump(manifest, f, indent=4)
+
+            # Download main.js (or extension.dex.js)
+            main_downloaded = False
+            for js_name in ['main.js', 'extension.dex.js']:
+                try:
+                    js_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{js_name}'
+                    req = urllib.request.Request(js_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        main_code = response.read().decode('utf-8')
+                    with open(os.path.join(ext_dir, js_name), 'w') as f:
+                        f.write(main_code)
+                    main_downloaded = True
+                    break
+                except urllib.error.HTTPError:
+                    continue
+
+            if not main_downloaded:
+                if os.path.exists(ext_dir):
+                    shutil.rmtree(ext_dir, ignore_errors=True)
+                return {'success': False, 'error': f'No se encontró main.js ni extension.dex.js en {owner}/{repo}'}
+
+            # Download additional files from manifest
+            extra_files = manifest.get('files', [])
+            for extra in extra_files:
+                try:
+                    f_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{extra}'
+                    req = urllib.request.Request(f_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        f_content = response.read().decode('utf-8')
+                    f_path = os.path.join(ext_dir, extra)
+                    os.makedirs(os.path.dirname(f_path), exist_ok=True)
+                    with open(f_path, 'w', encoding='utf-8') as f:
+                        f.write(f_content)
+                except:
+                    pass
+
+            # Try downloading README.md
+            try:
+                readme_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/README.md'
+                req = urllib.request.Request(readme_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    readme = response.read().decode('utf-8')
+                with open(os.path.join(ext_dir, 'README.md'), 'w') as f:
+                    f.write(readme)
+            except:
+                pass
+
+            # Register in DB
+            self.ext_db.mark_installed(ext_id)
+            self.ext_db.add_extension({
+                'id': ext_id,
+                'name': manifest.get('name', ext_id),
+                'version': manifest.get('version', '1.0.0'),
+                'description': manifest.get('description', ''),
+                'author': manifest.get('author', ''),
+                'category': manifest.get('category', 'editor'),
+                'icon': manifest.get('icon', 'puzzle'),
+                'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
+                'repo_url': repo_url
+            })
+            self.ext_db.increment_downloads(ext_id)
+
+            return {'success': True, 'message': f'Extensión "{manifest.get("name", ext_id)}" instalada correctamente'}
+        except urllib.error.HTTPError as e:
+            if os.path.exists(ext_dir):
+                shutil.rmtree(ext_dir, ignore_errors=True)
+            if e.code == 404:
+                return {'success': False, 'error': f'Error 404: Los archivos de la extensión "{ext_id}" no existen en el repositorio.'}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+        except Exception as e:
+            if os.path.exists(ext_dir):
+                shutil.rmtree(ext_dir, ignore_errors=True)
+            return {'success': False, 'error': str(e)}
+
+    def search_extensions(self, query):
+        """Search extensions in local DB"""
+        try:
+            results = self.ext_db.search_extensions(query)
+            return {'success': True, 'extensions': results}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_extension_stats(self, ext_id):
+        """Get stats for an extension"""
+        try:
+            ext_data = self.ext_db.get_extension(ext_id)
+            if not ext_data:
+                return {'success': False, 'error': f'Extensión "{ext_id}" no encontrada'}
+            versions = self.ext_db.get_versions(ext_id)
+            return {
+                'success': True,
+                'stats': {
+                    'id': ext_data.get('id'),
+                    'name': ext_data.get('name'),
+                    'version': ext_data.get('version'),
+                    'downloads': ext_data.get('downloads', 0),
+                    'installed': ext_data.get('installed', False),
+                    'author': ext_data.get('author', ''),
+                    'versions': versions
+                }
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def update_extension(self, ext_id, token):
+        """Update an existing published extension (bump version, upload new files, update registry)"""
+        if not self.current_project_path:
+            return {'success': False, 'error': 'No hay proyecto abierto'}
+        if not token or not token.strip():
+            return {'success': False, 'error': 'Token de GitHub vacío.'}
+        token = token.strip()
+        try:
+            import urllib.request
+
+            manifest_path = os.path.join(self.current_project_path, 'manifest.json')
+            if not os.path.exists(manifest_path):
+                return {'success': False, 'error': 'No se encontró manifest.json'}
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            if manifest.get('id') != ext_id:
+                return {'success': False, 'error': f'El manifest.json no corresponde a la extensión "{ext_id}"'}
+
+            # Bump patch version
+            version = manifest.get('version', '1.0.0')
+            version_parts = version.split('.')
+            if len(version_parts) == 3:
+                version_parts[2] = str(int(version_parts[2]) + 1)
+                manifest['version'] = '.'.join(version_parts)
+            else:
+                manifest['version'] = version + '.1'
+
+            # Save bumped manifest
+            with open(manifest_path, 'w') as f:
+                json.dump(manifest, f, indent=4)
+
+            # Get repo_url from DB or manifest
+            ext_data = self.ext_db.get_extension(ext_id)
+            repo_url = None
+            if ext_data:
+                repo_url = ext_data.get('repo_url')
+            if not repo_url:
+                repo_url = manifest.get('repo_url')
+            if not repo_url:
+                return {'success': False, 'error': 'No se encontró repo_url para esta extensión. Publícala primero con publish_extension_v2.'}
+
+            # Parse owner/repo
+            parts = repo_url.rstrip('/').split('/')
+            owner = parts[-2]
+            repo = parts[-1].replace('.git', '')
+
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'DEX-STUDIO/1.0'
+            }
+
+            def upload_file_to_repo(file_path_in_repo, content_str):
+                url = f'https://api.github.com/repos/{owner}/{repo}/contents/{file_path_in_repo}'
+                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                sha = None
+                try:
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        existing = json.loads(resp.read().decode('utf-8'))
+                        sha = existing.get('sha')
+                except:
+                    pass
+                body = {
+                    'message': f'Update extension: {manifest.get("name", ext_id)} v{manifest["version"]}',
+                    'content': encoded
+                }
+                if sha:
+                    body['sha'] = sha
+                data = json.dumps(body).encode('utf-8')
+                req = urllib.request.Request(url, data=data, headers=headers, method='PUT')
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    return json.loads(resp.read().decode('utf-8'))
+
+            # Upload ALL project files to author's repo
+            for root, dirs, files in os.walk(self.current_project_path):
+                dirs[:] = [d for d in dirs if d != 'build' and not d.startswith('.')]
+                for fname in files:
+                    if fname.startswith('.'):
+                        continue
+                    full_path = os.path.join(root, fname)
+                    rel_path = os.path.relpath(full_path, self.current_project_path)
+                    try:
+                        with open(full_path, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                        upload_file_to_repo(rel_path, file_content)
+                    except (UnicodeDecodeError, Exception):
+                        pass
+
+            # Build entry for registry/DB
+            new_entry = {
+                'id': ext_id,
+                'name': manifest.get('name', ext_id),
+                'version': manifest.get('version', '1.0.0'),
+                'description': manifest.get('description', ''),
+                'author': manifest.get('author', ''),
+                'category': manifest.get('category', 'editor'),
+                'icon': manifest.get('icon', 'puzzle'),
+                'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
+                'repo_url': repo_url
+            }
+
+            # Try to update central registry (optional — may fail with 403 if not collaborator)
+            registry_updated = False
+            try:
+                central_repo = 'farllirs/DEX-EXTENSIONS'
+                registry_url = f'https://api.github.com/repos/{central_repo}/contents/registry.json'
+                req = urllib.request.Request(registry_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    registry_data = json.loads(resp.read().decode('utf-8'))
+
+                registry_sha = registry_data.get('sha')
+                registry_content = base64.b64decode(registry_data['content']).decode('utf-8')
+                registry = json.loads(registry_content)
+
+                extensions_list = registry.get('extensions', [])
+                found = False
+                for i, ext in enumerate(extensions_list):
+                    if ext.get('id') == ext_id:
+                        extensions_list[i] = new_entry
+                        found = True
+                        break
+                if not found:
+                    extensions_list.append(new_entry)
+
+                registry['extensions'] = extensions_list
+                new_registry_content = json.dumps(registry, indent=4)
+
+                registry_body = {
+                    'message': f'Update registry: {manifest.get("name", ext_id)} v{manifest["version"]}',
+                    'content': base64.b64encode(new_registry_content.encode('utf-8')).decode('utf-8'),
+                    'sha': registry_sha
+                }
+                data = json.dumps(registry_body).encode('utf-8')
+                req = urllib.request.Request(registry_url, data=data, headers=headers, method='PUT')
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    pass
+                registry_updated = True
+            except urllib.error.HTTPError:
+                pass
+            except Exception:
+                pass
+
+            # Update local DB
+            self.ext_db.add_extension(new_entry)
+            self.ext_db.mark_published(ext_id, repo_url)
+
+            msg = f'Extensión "{manifest.get("name", ext_id)}" actualizada a v{manifest["version"]}'
+            if not registry_updated:
+                msg += ' (registro central pendiente — se actualizará cuando un admin apruebe)'
+            return {'success': True, 'message': msg}
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                return {'success': False, 'error': 'Error 403: Token sin permisos. Verifica que el token tenga scope "repo" y que el repositorio exista y sea tuyo.'}
+            elif e.code == 404:
+                return {'success': False, 'error': 'Error 404: Repositorio no encontrado. Verifica la URL.'}
+            elif e.code == 401:
+                return {'success': False, 'error': 'Error 401: Token inválido o expirado. Genera uno nuevo en GitHub → Settings → Developer Settings → Personal Access Tokens.'}
+            elif e.code == 422:
+                return {'success': False, 'error': 'Error 422: Conflicto al subir. Intenta de nuevo.'}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_installed_extensions_v2(self):
+        """Get installed extensions from DB"""
+        try:
+            extensions = self.ext_db.get_installed_extensions()
+            return {'success': True, 'extensions': extensions}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def sync_extension_registry(self):
+        """Fetch remote registry and sync with local DB"""
+        try:
+            import urllib.request
+            url = 'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/registry.json'
+            req = urllib.request.Request(url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                registry = json.loads(response.read().decode('utf-8'))
+
+            remote_extensions = registry.get('extensions', [])
+
+            # Sync each remote extension into local DB
+            for ext in remote_extensions:
+                self.ext_db.add_extension(ext)
+
+            # Build merged list — check DISK for real install status
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            merged = []
+            for ext in remote_extensions:
+                ext_id = ext.get('id')
+                local = self.ext_db.get_extension(ext_id)
+                entry = dict(ext)
+                # Verificar si existe en disco (fuente de verdad)
+                ext_dir = os.path.join(modules_dir, ext_id)
+                entry['installed'] = os.path.isdir(ext_dir)
+                if local:
+                    entry['downloads'] = local.get('downloads', 0)
+                    entry['is_disabled'] = local.get('is_disabled', 0)
+                else:
+                    entry['downloads'] = 0
+                    entry['is_disabled'] = 0
+                merged.append(entry)
+
+            return {'success': True, 'extensions': merged}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def run_extension_python(self, ext_id, script_name, args=''):
+        """Run a Python script from an extension's folder"""
+        try:
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            ext_dir = os.path.join(modules_dir, ext_id)
+            if not os.path.exists(ext_dir):
+                return {'success': False, 'error': f'Extensión "{ext_id}" no encontrada'}
+            script_path = os.path.realpath(os.path.join(ext_dir, script_name))
+            if not script_path.startswith(os.path.realpath(ext_dir)):
+                return {'success': False, 'error': 'Acceso denegado: ruta fuera del directorio de la extensión'}
+            if not os.path.exists(script_path):
+                return {'success': False, 'error': f'Script no encontrado: {script_name}'}
+            cmd = f'python3 "{script_path}" {args}'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=ext_dir, timeout=30)
+            return {
+                'success': True,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'code': result.returncode
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Timeout: el script tardó más de 30 segundos'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def list_extension_files(self, ext_id):
+        """List all files in an extension's directory"""
+        try:
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            ext_dir = os.path.join(modules_dir, ext_id)
+            if not os.path.exists(ext_dir):
+                return {'success': False, 'error': f'Extensión "{ext_id}" no encontrada'}
+            files = []
+            for root, dirs, filenames in os.walk(ext_dir):
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for fname in filenames:
+                    if fname.startswith('.'):
+                        continue
+                    full = os.path.join(root, fname)
+                    rel = os.path.relpath(full, ext_dir)
+                    files.append(rel)
+            return {'success': True, 'files': files}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def write_extension_file(self, ext_id, file_path, content):
+        """Write a file inside an extension's directory"""
+        try:
+            modules_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            ext_dir = os.path.join(modules_dir, ext_id)
+            full_path = os.path.realpath(os.path.join(ext_dir, file_path))
+            if not full_path.startswith(os.path.realpath(ext_dir)):
+                return {'success': False, 'error': 'Acceso denegado: ruta fuera del directorio de la extensión'}
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -740,6 +1529,71 @@ class API:
                 return {'success': False, 'error': 'La carpeta ya existe'}
             os.makedirs(full_path, exist_ok=True)
             return {'success': True, 'path': full_path}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def file_exists(self, path):
+        """Check if a file or directory exists"""
+        try:
+            return {'success': True, 'exists': os.path.exists(path)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def ext_storage_get(self, ext_id, key):
+        """Get a stored value for an extension"""
+        try:
+            storage_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions', ext_id)
+            storage_file = os.path.join(storage_dir, '.storage.json')
+            if os.path.exists(storage_file):
+                with open(storage_file, 'r') as f:
+                    data = json.load(f)
+                return {'success': True, 'value': data.get(key)}
+            return {'success': True, 'value': None}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def ext_storage_set(self, ext_id, key, value):
+        """Set a stored value for an extension"""
+        try:
+            storage_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions', ext_id)
+            storage_file = os.path.join(storage_dir, '.storage.json')
+            data = {}
+            if os.path.exists(storage_file):
+                with open(storage_file, 'r') as f:
+                    data = json.load(f)
+            data[key] = value
+            os.makedirs(storage_dir, exist_ok=True)
+            with open(storage_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def ext_storage_delete(self, ext_id, key):
+        """Delete a stored value for an extension"""
+        try:
+            storage_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions', ext_id)
+            storage_file = os.path.join(storage_dir, '.storage.json')
+            if not os.path.exists(storage_file):
+                return {'success': True}
+            with open(storage_file, 'r') as f:
+                data = json.load(f)
+            data.pop(key, None)
+            with open(storage_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def git_diff(self, path=None):
+        """Get git diff for current project or specific file"""
+        try:
+            cwd = self.current_project_path or os.getcwd()
+            cmd = ['git', 'diff']
+            if path:
+                cmd.extend(['--', path])
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            return {'success': True, 'diff': result.stdout}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
