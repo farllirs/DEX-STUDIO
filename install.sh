@@ -1,126 +1,365 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════════
 #  DEX STUDIO — Instalador Interactivo para Linux
+#  Autor: farllirs/dex
+# ══════════════════════════════════════════════════════════════
+
+# Forzar ejecución con bash si se lanzó con sh
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
+
+# ── Colores y estilos ──
+RESET="\033[0m"
+BOLD="\033[1m"
+DIM="\033[2m"
+
+BLACK="\033[30m"
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+MAGENTA="\033[35m"
+CYAN="\033[36m"
+WHITE="\033[97m"
+
+BG_BLACK="\033[40m"
+BG_BLUE="\033[44m"
+BG_MAGENTA="\033[45m"
+BG_CYAN="\033[46m"
+
+# ── Funciones de utilidad ──
+
+# Escribir texto con efecto typewriter
+typewrite() {
+    local text="$1"
+    local delay="${2:-0.03}"
+    local i=0
+    while [ $i -lt ${#text} ]; do
+        printf "%s" "${text:$i:1}"
+        sleep "$delay"
+        i=$((i + 1))
+    done
+    echo ""
+}
+
+# Spinner animado
+spinner() {
+    local pid=$1
+    local msg="$2"
+    local frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    local i=0
+    tput civis  # ocultar cursor
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}${frames[$i]}${RESET}  ${DIM}%s${RESET}" "$msg"
+        i=$(( (i + 1) % ${#frames[@]} ))
+        sleep 0.08
+    done
+    tput cnorm  # mostrar cursor
+    printf "\r"
+}
+
+# Barra de progreso
+progress_bar() {
+    local current=$1
+    local total=$2
+    local label="$3"
+    local width=30
+    local filled=$(( current * width / total ))
+    local empty=$(( width - filled ))
+    local bar=""
+    local i=0
+    while [ $i -lt $filled ]; do bar="${bar}█"; i=$((i+1)); done
+    i=0
+    while [ $i -lt $empty ]; do bar="${bar}░"; i=$((i+1)); done
+    local pct=$(( current * 100 / total ))
+    printf "\r  ${CYAN}[${GREEN}%s${CYAN}]${RESET} ${BOLD}%3d%%${RESET}  ${DIM}%s${RESET}" "$bar" "$pct" "$label"
+}
+
+# Línea decorativa
+divider() {
+    echo -e "  ${DIM}${CYAN}────────────────────────────────────────────────${RESET}"
+}
+
+# Mensaje de éxito
+ok() {
+    echo -e "  ${GREEN}${BOLD}✔${RESET}  $1"
+}
+
+# Mensaje de advertencia
+warn() {
+    echo -e "  ${YELLOW}${BOLD}⚠${RESET}  $1"
+}
+
+# Mensaje de error
+fail() {
+    echo -e "  ${RED}${BOLD}✖${RESET}  $1"
+}
+
+# Mensaje de info
+info() {
+    echo -e "  ${CYAN}${BOLD}→${RESET}  $1"
+}
+
+# Pausa elegante
+pause() {
+    sleep "${1:-0.4}"
+}
+
+# ══════════════════════════════════════════════════════════════
+#  PANTALLA DE BIENVENIDA
 # ══════════════════════════════════════════════════════════════
 
 clear
 echo ""
-echo "  ╔══════════════════════════════════════════════╗"
-echo "  ║                                              ║"
-echo "  ║       🎨  DEX STUDIO — Instalador            ║"
-echo "  ║       Creador de Apps para Linux              ║"
-echo "  ║                                              ║"
-echo "  ╚══════════════════════════════════════════════╝"
+pause 0.1
+
+echo -e "${BOLD}${MAGENTA}"
+echo "  ██████╗ ███████╗██╗  ██╗"
+echo "  ██╔══██╗██╔════╝╚██╗██╔╝"
+echo "  ██║  ██║█████╗   ╚███╔╝ "
+echo "  ██║  ██║██╔══╝   ██╔██╗ "
+echo "  ██████╔╝███████╗██╔╝ ██╗"
+echo "  ╚═════╝ ╚══════╝╚═╝  ╚═╝"
+echo -e "${RESET}"
+echo -e "  ${BOLD}${WHITE}S T U D I O${RESET}  ${DIM}— Creador de Apps para Linux${RESET}"
 echo ""
+
+divider
 
 VERSION=$(cat "$(dirname "$0")/VERSION.txt" 2>/dev/null || echo "1.0.1")
-echo "  Versión: $VERSION"
-echo "  ─────────────────────────────────────────"
-echo ""
+echo -e "  ${DIM}Versión ${BOLD}${WHITE}v${VERSION}${RESET}   ${DIM}·  Autor ${BOLD}${CYAN}farllirs/dex${RESET}"
 
-# ── Verificar requisitos ──
-echo "  [1/4] Verificando requisitos..."
+divider
 echo ""
+pause 0.3
+
+# ══════════════════════════════════════════════════════════════
+#  PASO 1 — VERIFICAR DEPENDENCIAS
+# ══════════════════════════════════════════════════════════════
+
+echo -e "  ${BOLD}${CYAN}[1/4]${RESET}  ${BOLD}Verificando dependencias...${RESET}"
+echo ""
+pause 0.2
 
 MISSING=""
+CHECKS=("python3" "python3-webview")
+TOTAL_CHECKS=${#CHECKS[@]}
+i=0
 
-if ! command -v python3 &>/dev/null; then
-    MISSING="$MISSING python3"
-fi
+for check in "${CHECKS[@]}"; do
+    i=$((i + 1))
+    progress_bar $i $TOTAL_CHECKS "Comprobando $check"
+    sleep 0.3
+    if [ "$check" = "python3" ] && ! command -v python3 &>/dev/null; then
+        MISSING="$MISSING python3"
+    fi
+    if [ "$check" = "python3-webview" ] && ! python3 -c "import webview" 2>/dev/null; then
+        MISSING="$MISSING python3-webview"
+    fi
+done
 
-if ! python3 -c "import webview" 2>/dev/null; then
-    MISSING="$MISSING python3-webview"
-fi
+echo ""
+echo ""
 
 if [ -n "$MISSING" ]; then
-    echo "  ⚠  Dependencias faltantes:$MISSING"
+    warn "Dependencias faltantes: ${BOLD}${RED}${MISSING}${RESET}"
     echo ""
-    read -p "  ¿Instalar dependencias automáticamente? [S/n]: " INSTALL_DEPS
+    echo -e "  ${YELLOW}¿Instalar automáticamente?${RESET}"
+    echo ""
+    printf "  ${BOLD}[S]${RESET} Sí, instalar   ${DIM}|${RESET}   ${DIM}[n]${RESET} Cancelar"
+    echo ""
+    echo ""
+    read -rp "  $(echo -e "${CYAN}❯${RESET} ") " INSTALL_DEPS
     INSTALL_DEPS=${INSTALL_DEPS:-S}
-    if [[ "$INSTALL_DEPS" =~ ^[Ss]$ ]]; then
-        echo ""
-        echo "  Instalando dependencias..."
-        sudo apt-get update -qq
-        sudo apt-get install -y python3 python3-pip python3-webview 2>/dev/null
-        pip3 install pywebview 2>/dev/null
-        echo "  ✅ Dependencias instaladas"
-    else
-        echo "  ❌ Instalación cancelada. Instala las dependencias manualmente."
-        exit 1
-    fi
+    echo ""
+
+    case "$INSTALL_DEPS" in
+        [Ss]|[Ss][Ii])
+            info "Actualizando repositorios..."
+            (sudo apt-get update -qq) &
+            spinner $! "apt-get update"
+            echo ""
+
+            info "Instalando paquetes del sistema..."
+            (sudo apt-get install -y python3 python3-pip python3-webview 2>/dev/null) &
+            spinner $! "apt-get install python3 python3-pip python3-webview"
+            echo ""
+
+            info "Instalando pywebview via pip..."
+            (pip3 install pywebview 2>/dev/null) &
+            spinner $! "pip3 install pywebview"
+            echo ""
+
+            ok "${GREEN}Dependencias instaladas correctamente${RESET}"
+            ;;
+        *)
+            echo ""
+            fail "Instalación cancelada. Instala las dependencias manualmente."
+            echo ""
+            exit 1
+            ;;
+    esac
 else
-    echo "  ✅ Todas las dependencias están instaladas"
+    ok "Todas las dependencias están ${GREEN}instaladas${RESET}"
 fi
+
+echo ""
+divider
 echo ""
 
-# ── Elegir directorio de instalación ──
-echo "  [2/4] Directorio de instalación"
+# ══════════════════════════════════════════════════════════════
+#  PASO 2 — DIRECTORIO DE INSTALACIÓN
+# ══════════════════════════════════════════════════════════════
+
+echo -e "  ${BOLD}${CYAN}[2/4]${RESET}  ${BOLD}Directorio de instalación${RESET}"
 echo ""
+
 DEFAULT_DIR="/usr/share/dex-studio"
-read -p "  Directorio [$DEFAULT_DIR]: " INSTALL_DIR
+echo -e "  ${DIM}Deja vacío para usar el directorio por defecto:${RESET}"
+echo -e "  ${DIM}→  ${WHITE}${DEFAULT_DIR}${RESET}"
+echo ""
+printf "  ${CYAN}❯${RESET} "
+read -r INSTALL_DIR
 INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_DIR}
+
+echo ""
+info "Instalando en: ${BOLD}${WHITE}${INSTALL_DIR}${RESET}"
+echo ""
+divider
 echo ""
 
-# ── Copiar archivos ──
-echo "  [3/4] Instalando archivos..."
+# ══════════════════════════════════════════════════════════════
+#  PASO 3 — COPIAR ARCHIVOS
+# ══════════════════════════════════════════════════════════════
+
+echo -e "  ${BOLD}${CYAN}[3/4]${RESET}  ${BOLD}Instalando archivos...${RESET}"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-sudo mkdir -p "$INSTALL_DIR"
-sudo cp -r "$SCRIPT_DIR/backend" "$INSTALL_DIR/"
-sudo cp -r "$SCRIPT_DIR/frontend" "$INSTALL_DIR/"
-sudo cp -r "$SCRIPT_DIR/templates" "$INSTALL_DIR/"
-sudo cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/"
-sudo cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
-sudo cp "$SCRIPT_DIR/VERSION.txt" "$INSTALL_DIR/"
-sudo cp "$SCRIPT_DIR/dex-icon.png" "$INSTALL_DIR/"
-[ -f "$SCRIPT_DIR/editor-config.json" ] && sudo cp "$SCRIPT_DIR/editor-config.json" "$INSTALL_DIR/"
+ARCHIVOS=(
+    "Creando directorio de instalación"
+    "Copiando backend"
+    "Copiando frontend"
+    "Copiando templates"
+    "Copiando archivos principales"
+    "Creando comando dex-studio"
+    "Instalando icono"
+    "Creando entrada de aplicaciones"
+    "Creando acceso directo en escritorio"
+    "Actualizando caché del sistema"
+)
+TOTAL=${#ARCHIVOS[@]}
 
-# Crear acceso directo en /usr/bin
+# Función interna para mostrar progreso por paso
+step() {
+    local n=$1
+    local label="${ARCHIVOS[$((n-1))]}"
+    progress_bar $n $TOTAL "$label"
+    sleep 0.25
+}
+
+step 1
+sudo mkdir -p "$INSTALL_DIR"
+
+step 2
+sudo cp -r "$SCRIPT_DIR/backend" "$INSTALL_DIR/" 2>/dev/null
+
+step 3
+sudo cp -r "$SCRIPT_DIR/frontend" "$INSTALL_DIR/" 2>/dev/null
+
+step 4
+sudo cp -r "$SCRIPT_DIR/templates" "$INSTALL_DIR/" 2>/dev/null
+
+step 5
+sudo cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/" 2>/dev/null
+sudo cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/" 2>/dev/null
+sudo cp "$SCRIPT_DIR/VERSION.txt" "$INSTALL_DIR/" 2>/dev/null
+sudo cp "$SCRIPT_DIR/dex-icon.png" "$INSTALL_DIR/" 2>/dev/null
+[ -f "$SCRIPT_DIR/editor-config.json" ] && sudo cp "$SCRIPT_DIR/editor-config.json" "$INSTALL_DIR/" 2>/dev/null
+
+step 6
 sudo bash -c "cat > /usr/bin/dex-studio << 'BINEOF'
 #!/bin/bash
 cd /usr/share/dex-studio && python3 main.py \"\$@\"
 BINEOF"
 sudo chmod 755 /usr/bin/dex-studio
 
-# Icono
+step 7
 sudo mkdir -p /usr/share/icons/hicolor/256x256/apps
 sudo cp "$SCRIPT_DIR/dex-icon.png" /usr/share/icons/hicolor/256x256/apps/dex-studio.png
 
-# Desktop entry
-sudo bash -c 'cat > /usr/share/applications/dex-studio.desktop << DTEOF
+step 8
+sudo bash -c "cat > /usr/share/applications/dex-studio.desktop << DTEOF
 [Desktop Entry]
 Type=Application
 Name=DEX STUDIO
 GenericName=IDE para Linux
 Comment=Creador de aplicaciones para Linux
-Exec=dex-studio
-Icon=dex-studio
+Exec=bash -c 'cd $INSTALL_DIR && bash run.sh || python3 main.py'
+Icon=$INSTALL_DIR/dex-icon.png
 Terminal=false
 Categories=Development;IDE;
 Keywords=IDE;editor;development;python;
 StartupWMClass=dex-studio
-DTEOF'
+X-Author=farllirs/dex
+DTEOF"
 
-# Actualizar caches
+step 9
+DESKTOP_DIR="$HOME/Escritorio"
+[ -d "$HOME/Desktop" ] && DESKTOP_DIR="$HOME/Desktop"
+
+cat > "$DESKTOP_DIR/dex-studio.desktop" << DESKEOF
+[Desktop Entry]
+Type=Application
+Name=DEX STUDIO
+GenericName=IDE para Linux
+Comment=Creador de aplicaciones para Linux
+Exec=bash -c 'cd $INSTALL_DIR && bash run.sh || python3 main.py'
+Icon=$INSTALL_DIR/dex-icon.png
+Terminal=false
+Categories=Development;IDE;
+Keywords=IDE;editor;development;python;
+StartupWMClass=dex-studio
+X-Author=farllirs/dex
+DESKEOF
+chmod +x "$DESKTOP_DIR/dex-studio.desktop"
+gio set "$DESKTOP_DIR/dex-studio.desktop" metadata::trusted true 2>/dev/null
+dbus-launch gio set "$DESKTOP_DIR/dex-studio.desktop" metadata::trusted true 2>/dev/null
+
+step 10
 sudo update-desktop-database /usr/share/applications 2>/dev/null
 sudo gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null
 
-echo "  ✅ Archivos instalados en: $INSTALL_DIR"
+echo ""
+echo ""
+ok "${GREEN}${BOLD}Todos los archivos instalados en:${RESET} ${WHITE}${INSTALL_DIR}${RESET}"
+echo ""
+divider
 echo ""
 
-# ── Resumen ──
-echo "  [4/4] ¡Instalación completada!"
+# ══════════════════════════════════════════════════════════════
+#  PASO 4 — RESUMEN FINAL
+# ══════════════════════════════════════════════════════════════
+
+echo -e "  ${BOLD}${CYAN}[4/4]${RESET}  ${BOLD}¡Instalación completada!${RESET}"
 echo ""
-echo "  ╔══════════════════════════════════════════════╗"
-echo "  ║                                              ║"
-echo "  ║   ✅  DEX STUDIO instalado correctamente     ║"
-echo "  ║                                              ║"
-echo "  ║   Ejecutar desde terminal:                   ║"
-echo "  ║     \$ dex-studio                             ║"
-echo "  ║                                              ║"
-echo "  ║   También disponible en el menú de apps      ║"
-echo "  ║                                              ║"
-echo "  ╚══════════════════════════════════════════════╝"
+pause 0.3
+
+echo -e "${BOLD}${GREEN}"
+echo "  ╔══════════════════════════════════════════════════╗"
+echo "  ║                                                  ║"
+echo "  ║   ✔   DEX STUDIO instalado correctamente        ║"
+echo "  ║                                                  ║"
+echo "  ╠══════════════════════════════════════════════════╣"
+echo -e "  ║                                                  ║${RESET}"
+echo -e "  ${GREEN}║${RESET}   ${CYAN}${BOLD}▸ Terminal:${RESET}   ${WHITE}dex-studio${RESET}                         ${GREEN}║${RESET}"
+echo -e "  ${GREEN}║${RESET}   ${CYAN}${BOLD}▸ Escritorio:${RESET} Icono en tu escritorio             ${GREEN}║${RESET}"
+echo -e "  ${GREEN}║${RESET}   ${CYAN}${BOLD}▸ Menú apps:${RESET}  Busca \"DEX STUDIO\"                 ${GREEN}║${RESET}"
+echo -e "  ${GREEN}║${RESET}                                                  ${GREEN}║${RESET}"
+echo -e "  ${GREEN}║${RESET}   ${DIM}Autor: farllirs/dex   ·   v${VERSION}${RESET}               ${GREEN}║${RESET}"
+echo -e "  ${GREEN}║                                                  ║"
+echo "  ╚══════════════════════════════════════════════════╝"
+echo -e "${RESET}"
 echo ""
