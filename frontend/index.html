@@ -58,6 +58,9 @@
             <button class="activity-icon" onclick="app.showView('extensions')" data-view="extensions" title="Extensiones">
                 <i data-lucide="puzzle"></i>
             </button>
+            <button class="activity-icon" onclick="app.showView('apps-hub')" data-view="apps-hub" title="Apps Linux (DEX)">
+                <i data-lucide="download"></i>
+            </button>
             <button class="activity-icon" onclick="app.showView('sdk-reference')" data-view="sdk-reference" title="SDK Reference">
                 <i data-lucide="book-open"></i>
             </button>
@@ -84,7 +87,7 @@
                     <input type="text" placeholder="Buscar…" class="search-input">
                 </div>
 
-                <div class="action-buttons">
+                <div class="action-buttons" id="top-action-buttons" style="display:none">
                     <button class="action-btn" id="run-btn" onclick="app.runProject()">
                         <i data-lucide="play" id="run-btn-icon"></i>
                         <span id="run-btn-text">Ejecutar</span>
@@ -708,6 +711,9 @@
                                     <li>Marketplace detecta extensiones con repositorio no disponible y las oculta tras periodo de gracia.</li>
                                     <li>Mejoras de publicación/instalación para temas: soporte consistente de <code>theme.css</code>.</li>
                                     <li>Corrección de regresión en botón principal de Ejecutar/Probar al aplicar overrides.</li>
+                                    <li>Nuevo panel <strong>Apps Linux (DEX)</strong> para gestionar apps instaladas y paquetes <code>.deb</code> firmados por DEX.</li>
+                                    <li>Buscador superior con acciones rápidas y búsqueda real en proyecto (contenido + nombre de archivo).</li>
+                                    <li>Topbar más limpio: botones de Ejecutar/Compilar/Terminal solo visibles en editor con proyecto abierto.</li>
                                 </ul>
                             </div>
                         </div>
@@ -778,6 +784,58 @@
                             <div class="ext-v2-empty">
                                 <i data-lucide="globe" style="width:32px;height:32px;color:var(--text-tertiary)"></i>
                                 <p>Haz click en <strong>Marketplace</strong> para cargar extensiones de la comunidad</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── View: Apps Linux (DEX Hub) ───────────────── -->
+            <section id="view-apps-hub" class="view-section">
+                <div class="ext-v2-container">
+                    <div class="ext-v2-searchbar" style="display:flex;align-items:center;gap:10px">
+                        <i data-lucide="search" class="ext-v2-search-icon"></i>
+                        <input type="text" id="apphub-search" class="form-input" placeholder="Buscar por nombre, paquete o firma DEX...">
+                        <button class="btn-secondary btn-sm" onclick="app.loadDexAppsHub(true)">
+                            <i data-lucide="refresh-cw"></i> Refrescar
+                        </button>
+                    </div>
+
+                    <div class="settings-v2-info-box" style="margin-bottom:10px">
+                        <i data-lucide="package-check"></i>
+                        <div>
+                            <strong>Apps Linux creadas con DEX STUDIO</strong>
+                            <p>Gestiona apps firmadas con <code>X-DEX-Identifier</code>, revisa paquetes <code>.deb</code>, instala/descarga y desinstala.</p>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;margin-bottom:10px">
+                        <button class="btn-primary btn-sm apphub-tab active" data-apphub-tab="installed" onclick="app.switchDexAppsTab('installed')">
+                            <i data-lucide="hard-drive-download"></i>
+                            Instaladas
+                            <span class="ext-v2-tab-count" id="apphub-installed-count">0</span>
+                        </button>
+                        <button class="btn-secondary btn-sm apphub-tab" data-apphub-tab="available" onclick="app.switchDexAppsTab('available')">
+                            <i data-lucide="file-archive"></i>
+                            Paquetes .deb
+                            <span class="ext-v2-tab-count" id="apphub-available-count">0</span>
+                        </button>
+                    </div>
+
+                    <div id="apphub-panel-installed" class="apphub-panel">
+                        <div id="apphub-installed-list" class="ext-v2-list">
+                            <div class="ext-v2-empty">
+                                <i data-lucide="loader" style="width:24px;height:24px;color:var(--accent);animation:spin 1s linear infinite"></i>
+                                <p>Cargando apps instaladas...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="apphub-panel-available" class="apphub-panel" style="display:none">
+                        <div id="apphub-available-list" class="ext-v2-list">
+                            <div class="ext-v2-empty">
+                                <i data-lucide="loader" style="width:24px;height:24px;color:var(--accent);animation:spin 1s linear infinite"></i>
+                                <p>Cargando paquetes .deb...</p>
                             </div>
                         </div>
                     </div>

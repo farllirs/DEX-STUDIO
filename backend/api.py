@@ -4,6 +4,10 @@ import shutil
 import subprocess
 import re
 import base64
+import ast
+import time
+import sys
+import glob
 import urllib.error
 from datetime import datetime, timedelta
 from backend.packager import Packager
@@ -311,6 +315,183 @@ class API:
             cwd = self.current_project_path or os.getcwd()
             result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=cwd)
             return {'success': True, 'stdout': result.stdout, 'stderr': result.stderr, 'code': result.returncode}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _extract_python_imports(self, file_path):
+        imports = set()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        tree = ast.parse(source, filename=file_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    name = (alias.name or '').split('.')[0].strip()
+                    if name:
+                        imports.add(name)
+            elif isinstance(node, ast.ImportFrom):
+                # Relative imports are usually local project modules.
+                if getattr(node, 'level', 0):
+                    continue
+                mod = (node.module or '').split('.')[0].strip()
+                if mod:
+                    imports.add(mod)
+        return sorted(imports)
+
+    def detect_missing_python_modules(self, main_file='main.py', interpreter='python3'):
+        """Inspect imports in main_file and return modules missing in current interpreter."""
+        try:
+            if not self.current_project_path:
+                return {'success': False, 'error': 'No hay proyecto abierto'}
+
+            main_file = (main_file or 'main.py').strip()
+            main_path = os.path.realpath(os.path.join(self.current_project_path, main_file))
+            project_root = os.path.realpath(self.current_project_path)
+            if not main_path.startswith(project_root):
+                return {'success': False, 'error': 'Ruta inválida para archivo principal'}
+            if not os.path.exists(main_path):
+                return {'success': False, 'error': f'No existe {main_file}'}
+
+            imports = self._extract_python_imports(main_path)
+
+            local_modules = set()
+            for item in os.listdir(project_root):
+                if item.endswith('.py'):
+                    local_modules.add(item[:-3])
+                item_path = os.path.join(project_root, item)
+                if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, '__init__.py')):
+                    local_modules.add(item)
+
+            candidates = [m for m in imports if m not in local_modules]
+
+            pip_map = {
+                'cv2': 'opencv-python',
+                'PIL': 'Pillow',
+                'yaml': 'PyYAML',
+                'Crypto': 'pycryptodome',
+                'sklearn': 'scikit-learn',
+                'bs4': 'beautifulsoup4',
+                'tkinter': 'apt:python3-tk',
+                'Tkinter': 'apt:python3-tk'
+            }
+
+            missing = []
+            for mod in candidates:
+                probe = subprocess.run(
+                    [interpreter, '-c', f"import importlib,sys; importlib.import_module('{mod}'); sys.exit(0)"],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root
+                )
+                if probe.returncode != 0:
+                    missing.append({
+                        'module': mod,
+                        'package': pip_map.get(mod, mod)
+                    })
+
+            return {
+                'success': True,
+                'imports': imports,
+                'missing_modules': missing,
+                'main_file': main_file,
+                'interpreter': interpreter
+            }
+        except SyntaxError as e:
+            return {'success': False, 'error': f'Error de sintaxis en {main_file}: {e}'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def install_python_modules(self, modules, interpreter='python3'):
+        """Install Python packages with pip for current user. Returns stdout/stderr and duration."""
+        try:
+            if not self.current_project_path:
+                return {'success': False, 'error': 'No hay proyecto abierto'}
+
+            if not isinstance(modules, list) or not modules:
+                return {'success': False, 'error': 'Lista de módulos vacía'}
+
+            pkgs = []
+            for item in modules:
+                if isinstance(item, dict):
+                    pkg = (item.get('package') or item.get('module') or '').strip()
+                else:
+                    pkg = str(item).strip()
+                if pkg:
+                    pkgs.append(pkg)
+            pkgs = sorted(set(pkgs))
+            if not pkgs:
+                return {'success': False, 'error': 'No hay paquetes válidos para instalar'}
+
+            apt_pkgs = []
+            pip_pkgs = []
+            for p in pkgs:
+                if p.startswith('apt:'):
+                    apt_name = p.split(':', 1)[1].strip()
+                    if apt_name:
+                        apt_pkgs.append(apt_name)
+                else:
+                    pip_pkgs.append(p)
+
+            start = time.time()
+            logs_out = []
+            logs_err = []
+            code = 0
+
+            if apt_pkgs:
+                apt_cmd = ['apt-get', 'install', '-y'] + sorted(set(apt_pkgs))
+                if os.geteuid() != 0:
+                    apt_cmd = ['sudo'] + apt_cmd
+                apt_proc = subprocess.run(apt_cmd, capture_output=True, text=True, cwd=self.current_project_path)
+                logs_out.append(apt_proc.stdout or '')
+                logs_err.append(apt_proc.stderr or '')
+                code = apt_proc.returncode
+                if code != 0:
+                    duration = round(time.time() - start, 2)
+                    return {
+                        'success': False,
+                        'installed_packages': pkgs,
+                        'stdout': '\n'.join(logs_out).strip(),
+                        'stderr': '\n'.join(logs_err).strip(),
+                        'code': code,
+                        'duration_seconds': duration,
+                        'error': apt_proc.stderr or 'No se pudo instalar paquetes del sistema'
+                    }
+
+            if pip_pkgs:
+                cmd = [interpreter, '-m', 'pip', 'install', '--user'] + sorted(set(pip_pkgs))
+                proc = subprocess.run(cmd, capture_output=True, text=True, cwd=self.current_project_path)
+                logs_out.append(proc.stdout or '')
+                logs_err.append(proc.stderr or '')
+                code = proc.returncode
+
+                stderr_lower = (proc.stderr or '').lower()
+                if code != 0 and ('externally managed' in stderr_lower or 'externally-managed-environment' in stderr_lower):
+                    cmd_fallback = [interpreter, '-m', 'pip', 'install', '--break-system-packages'] + sorted(set(pip_pkgs))
+                    proc = subprocess.run(cmd_fallback, capture_output=True, text=True, cwd=self.current_project_path)
+                    logs_out.append(proc.stdout or '')
+                    logs_err.append(proc.stderr or '')
+                    code = proc.returncode
+
+            duration = round(time.time() - start, 2)
+            if code == 0:
+                return {
+                    'success': True,
+                    'installed_packages': pkgs,
+                    'stdout': '\n'.join(logs_out).strip(),
+                    'stderr': '\n'.join(logs_err).strip(),
+                    'code': code,
+                    'duration_seconds': duration
+                }
+
+            return {
+                'success': False,
+                'installed_packages': pkgs,
+                'stdout': '\n'.join(logs_out).strip(),
+                'stderr': '\n'.join(logs_err).strip(),
+                'code': code,
+                'duration_seconds': duration,
+                'error': '\n'.join(logs_err).strip() or 'No se pudo instalar paquetes'
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -1909,6 +2090,238 @@ class API:
         """Check if a file or directory exists"""
         try:
             return {'success': True, 'exists': os.path.exists(path)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # ── DEX Apps Hub (Linux apps built with DEX) ─────────────────────
+
+    def _read_desktop_entry(self, desktop_path):
+        data = {}
+        try:
+            with open(desktop_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    k, v = line.split('=', 1)
+                    data[k.strip()] = v.strip()
+            return data
+        except Exception:
+            return {}
+
+    def _dpkg_installed(self, package_name):
+        try:
+            if not package_name:
+                return False
+            proc = subprocess.run(['dpkg', '-s', package_name], capture_output=True, text=True)
+            return proc.returncode == 0
+        except Exception:
+            return False
+
+    def _deb_fields(self, deb_path):
+        out = {'package': '', 'version': '', 'description': '', 'maintainer': '', 'section': ''}
+        try:
+            proc = subprocess.run(
+                ['dpkg-deb', '-f', deb_path, 'Package', 'Version', 'Description', 'Maintainer', 'Section'],
+                capture_output=True,
+                text=True
+            )
+            if proc.returncode != 0:
+                return out
+            lines = (proc.stdout or '').splitlines()
+            while len(lines) < 5:
+                lines.append('')
+            out['package'] = (lines[0] or '').strip()
+            out['version'] = (lines[1] or '').strip()
+            out['description'] = (lines[2] or '').strip()
+            out['maintainer'] = (lines[3] or '').strip()
+            out['section'] = (lines[4] or '').strip()
+            return out
+        except Exception:
+            return out
+
+    def get_dex_apps_hub_data(self):
+        """Return installed DEX-signed apps and available local .deb packages."""
+        try:
+            installed_apps = []
+            desktop_dirs = [
+                '/usr/share/applications',
+                os.path.join(os.path.expanduser('~'), '.local', 'share', 'applications')
+            ]
+
+            for d in desktop_dirs:
+                if not os.path.isdir(d):
+                    continue
+                for desktop_file in glob.glob(os.path.join(d, '*.desktop')):
+                    entry = self._read_desktop_entry(desktop_file)
+                    dex_id = entry.get('X-DEX-Identifier', '').strip()
+                    if not dex_id:
+                        continue
+                    exec_cmd = entry.get('Exec', '').strip()
+                    package_name = exec_cmd.split()[0] if exec_cmd else ''
+                    installed_apps.append({
+                        'name': entry.get('Name', package_name or 'App DEX'),
+                        'package': package_name,
+                        'identifier': dex_id,
+                        'description': entry.get('Comment', ''),
+                        'icon': entry.get('Icon', ''),
+                        'categories': entry.get('Categories', ''),
+                        'desktop_file': desktop_file,
+                        'installed': True
+                    })
+
+            seen_installed = set()
+            deduped = []
+            for app in installed_apps:
+                key = (app.get('identifier', ''), app.get('package', ''), app.get('name', ''))
+                if key in seen_installed:
+                    continue
+                seen_installed.add(key)
+                deduped.append(app)
+            installed_apps = sorted(deduped, key=lambda x: (x.get('name') or '').lower())
+
+            available_debs = []
+            project_roots = [self.projects_root]
+            for extra in [
+                os.path.join(os.path.expanduser('~'), 'DEX Projects'),
+                '/home/Dex/DEX_Projects',
+                '/home/Dex/DEX Projects'
+            ]:
+                if extra not in project_roots:
+                    project_roots.append(extra)
+            if self.current_project_path:
+                maybe_root = os.path.dirname(os.path.realpath(self.current_project_path))
+                if maybe_root and maybe_root not in project_roots:
+                    project_roots.append(maybe_root)
+
+            seen_deb = set()
+            for root in project_roots:
+                pattern = os.path.join(root, '*', 'build', '*.deb')
+                for deb_path in glob.glob(pattern):
+                    if deb_path in seen_deb:
+                        continue
+                    seen_deb.add(deb_path)
+                    fields = self._deb_fields(deb_path)
+                    if not fields.get('package'):
+                        continue
+
+                    project_root = os.path.dirname(os.path.dirname(deb_path))
+                    metadata_path = os.path.join(project_root, 'metadata.json')
+                    dex_identifier = ''
+                    app_name = ''
+                    if os.path.exists(metadata_path):
+                        try:
+                            with open(metadata_path, 'r', encoding='utf-8') as f:
+                                meta = json.load(f)
+                            dex_identifier = (meta.get('identifier') or '').strip()
+                            app_name = (meta.get('name') or '').strip()
+                        except Exception:
+                            pass
+
+                    if not dex_identifier:
+                        dex_identifier = 'unknown'
+                    installed = self._dpkg_installed(fields.get('package'))
+                    available_debs.append({
+                        'name': app_name or fields.get('package') or os.path.basename(deb_path),
+                        'package': fields.get('package', ''),
+                        'version': fields.get('version', ''),
+                        'description': fields.get('description', ''),
+                        'maintainer': fields.get('maintainer', ''),
+                        'section': fields.get('section', ''),
+                        'identifier': dex_identifier,
+                        'deb_path': deb_path,
+                        'project_root': project_root,
+                        'installed': installed
+                    })
+
+            available_debs = sorted(available_debs, key=lambda x: ((x.get('name') or '').lower(), (x.get('version') or '')))
+            return {'success': True, 'installed_apps': installed_apps, 'available_debs': available_debs}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def install_dex_deb(self, deb_path):
+        """Install a local .deb package and fix dependencies if required."""
+        try:
+            path = os.path.expanduser(deb_path or '').strip()
+            if not path or not os.path.isfile(path):
+                return {'success': False, 'error': 'Archivo .deb no encontrado'}
+            if not path.endswith('.deb'):
+                return {'success': False, 'error': 'El archivo no es .deb'}
+
+            # Basic safety: allow only under home/project roots.
+            real_path = os.path.realpath(path)
+            allowed_roots = [
+                os.path.realpath(self.projects_root),
+                os.path.realpath(os.path.expanduser('~')),
+                os.path.realpath('/home/Dex')
+            ]
+            if not any(real_path.startswith(root) for root in allowed_roots):
+                return {'success': False, 'error': 'Ruta .deb fuera de ubicaciones permitidas'}
+
+            def _cmd(base):
+                if os.geteuid() == 0:
+                    return base
+                return ['sudo'] + base
+
+            logs = []
+            cmd_install = _cmd(['dpkg', '-i', real_path])
+            proc = subprocess.run(cmd_install, capture_output=True, text=True)
+            logs.append(proc.stdout or '')
+            logs.append(proc.stderr or '')
+            if proc.returncode != 0:
+                fix_cmd = _cmd(['apt-get', 'install', '-f', '-y'])
+                fix = subprocess.run(fix_cmd, capture_output=True, text=True)
+                logs.append(fix.stdout or '')
+                logs.append(fix.stderr or '')
+                proc2 = subprocess.run(cmd_install, capture_output=True, text=True)
+                logs.append(proc2.stdout or '')
+                logs.append(proc2.stderr or '')
+                code = proc2.returncode
+            else:
+                code = 0
+
+            if code == 0:
+                return {'success': True, 'message': 'Aplicación instalada correctamente', 'stdout': '\n'.join(logs)}
+            return {'success': False, 'error': 'No se pudo instalar el paquete .deb', 'stdout': '\n'.join(logs), 'code': code}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def uninstall_dex_app(self, package_name):
+        """Uninstall app package by Debian package name."""
+        try:
+            package = (package_name or '').strip()
+            if not package:
+                return {'success': False, 'error': 'Paquete inválido'}
+            cmd = ['apt-get', 'remove', '-y', package]
+            if os.geteuid() != 0:
+                cmd = ['sudo'] + cmd
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            out = (proc.stdout or '') + '\n' + (proc.stderr or '')
+            if proc.returncode == 0:
+                return {'success': True, 'message': f'Aplicación desinstalada: {package}', 'stdout': out}
+            return {'success': False, 'error': f'No se pudo desinstalar {package}', 'stdout': out}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def download_dex_deb(self, deb_path):
+        """Copy .deb to ~/Downloads so user can distribute/download it."""
+        try:
+            src = os.path.realpath(os.path.expanduser(deb_path or '').strip())
+            if not src or not os.path.isfile(src):
+                return {'success': False, 'error': 'Archivo .deb no encontrado'}
+            if not src.endswith('.deb'):
+                return {'success': False, 'error': 'El archivo no es .deb'}
+
+            downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
+            os.makedirs(downloads, exist_ok=True)
+            base = os.path.basename(src)
+            dest = os.path.join(downloads, base)
+            if os.path.exists(dest):
+                ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+                name, ext = os.path.splitext(base)
+                dest = os.path.join(downloads, f'{name}-{ts}{ext}')
+            shutil.copy2(src, dest)
+            return {'success': True, 'message': 'Archivo copiado a Downloads', 'path': dest}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

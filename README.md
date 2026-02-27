@@ -76,6 +76,10 @@ La documentación de extensiones está separada en su repositorio dedicado:
   - Después de un periodo de gracia, se oculta automáticamente.
 - Mejoras en publicación/instalación de extensiones `theme` y `ui-theme` con manejo estable de `theme.css`.
 - Corrección de regresión del botón principal Ejecutar/Probar al usar overrides de UI.
+- Nuevo panel `Apps Linux (DEX)` para gestionar apps instaladas por firma DEX y paquetes `.deb` locales.
+- Acciones integradas para apps Linux: instalar `.deb`, copiar a `Downloads` y desinstalar.
+- Buscador superior mejorado: acciones rápidas de navegación/comandos y búsqueda real en proyecto.
+- Topbar contextual: botones `Ejecutar/Compilar/Terminal` visibles solo en vista de editor con proyecto abierto.
 
 ## Repositorios
 

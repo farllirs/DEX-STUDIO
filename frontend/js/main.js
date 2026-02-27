@@ -694,6 +694,7 @@ const app = {
         this.log("DEX STUDIO v1.0.3 — Creador de Apps para Linux");
         document.getElementById('breadcrumb-text').textContent = 'Inicio';
         this.applyCoreButtonOverrides();
+        this.updateTopActionButtonsVisibility('home');
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -753,6 +754,10 @@ const app = {
                     this.searchInProject();
                 }
             });
+        }
+        const appHubSearch = document.getElementById('apphub-search');
+        if (appHubSearch) {
+            appHubSearch.addEventListener('input', () => this.renderDexAppsHub());
         }
 
         // Terminal input handler
@@ -1111,6 +1116,264 @@ const app = {
         }
     },
 
+    // ── DEX Apps Hub ──
+    _dexAppsLoaded: false,
+    _dexAppsTab: 'installed',
+    _dexAppsData: { installed_apps: [], available_debs: [] },
+
+    switchDexAppsTab: function(tab) {
+        this._dexAppsTab = tab;
+        document.querySelectorAll('.apphub-tab').forEach(function(btn) {
+            var active = btn.getAttribute('data-apphub-tab') === tab;
+            btn.classList.toggle('active', active);
+            if (active) {
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-primary');
+            } else {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+            }
+        });
+        var pInstalled = document.getElementById('apphub-panel-installed');
+        var pAvailable = document.getElementById('apphub-panel-available');
+        if (pInstalled) pInstalled.style.display = (tab === 'installed') ? '' : 'none';
+        if (pAvailable) pAvailable.style.display = (tab === 'available') ? '' : 'none';
+    },
+
+    loadDexAppsHub: async function(force) {
+        if (force === undefined) force = false;
+        if (this._dexAppsLoaded && !force) {
+            this.renderDexAppsHub();
+            return;
+        }
+        var installedList = document.getElementById('apphub-installed-list');
+        var availableList = document.getElementById('apphub-available-list');
+        if (installedList) installedList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando apps instaladas...</p></div>';
+        if (availableList) availableList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando paquetes .deb...</p></div>';
+        this._refreshIcons();
+        try {
+            var res = await window.pywebview.api.get_dex_apps_hub_data();
+            if (!res || !res.success) throw new Error((res && res.error) || 'No se pudo cargar Apps Hub');
+            this._dexAppsData = {
+                installed_apps: Array.isArray(res.installed_apps) ? res.installed_apps : [],
+                available_debs: Array.isArray(res.available_debs) ? res.available_debs : []
+            };
+            this._dexAppsLoaded = true;
+            this.renderDexAppsHub();
+        } catch (e) {
+            if (installedList) installedList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando apps instaladas</p></div>';
+            if (availableList) availableList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando paquetes .deb</p></div>';
+            this.log('Apps Hub: ' + e.message, true);
+            this.showNotification('Apps Hub', 'No se pudo cargar información', 'error', 3500);
+            this._refreshIcons();
+        }
+    },
+
+    renderDexAppsHub: function() {
+        var searchInput = document.getElementById('apphub-search');
+        var q = ((searchInput && searchInput.value) || '').toLowerCase().trim();
+        var installed = (this._dexAppsData.installed_apps || []).filter(function(item) {
+            var text = [item.name, item.package, item.identifier, item.description].join(' ').toLowerCase();
+            return !q || text.indexOf(q) !== -1;
+        });
+        var available = (this._dexAppsData.available_debs || []).filter(function(item) {
+            var text = [item.name, item.package, item.identifier, item.description, item.version].join(' ').toLowerCase();
+            return !q || text.indexOf(q) !== -1;
+        });
+        this.renderDexInstalledApps(installed);
+        this.renderDexAvailableDebs(available);
+        var c1 = document.getElementById('apphub-installed-count');
+        var c2 = document.getElementById('apphub-available-count');
+        if (c1) c1.textContent = String(installed.length);
+        if (c2) c2.textContent = String(available.length);
+        this._refreshIcons();
+    },
+
+    renderDexInstalledApps: function(list) {
+        var container = document.getElementById('apphub-installed-list');
+        if (!container) return;
+        if (!list.length) {
+            container.innerHTML = '<div class="ext-v2-empty"><i data-lucide="hard-drive-download" style="width:28px;height:28px;color:var(--text-tertiary)"></i><p>No hay apps DEX instaladas</p></div>';
+            return;
+        }
+        var html = '';
+        list.forEach(function(appItem) {
+            var name = app.escapeHtml(appItem.name || 'App DEX');
+            var pkgRaw = String(appItem.package || '');
+            var pkg = app.escapeHtml(pkgRaw || '-');
+            var idf = app.escapeHtml(appItem.identifier || '-');
+            var desc = app.escapeHtml(appItem.description || 'Sin descripción');
+            var dataPkg = encodeURIComponent(pkgRaw);
+            html += '<div class="ext-v2-card">' +
+                '<div class="ext-v2-card-icon" style="background:linear-gradient(135deg,#16a34a,#15803d)"><i data-lucide="app-window"></i></div>' +
+                '<div class="ext-v2-card-body">' +
+                    '<div class="ext-v2-card-title">' + name + '</div>' +
+                    '<div class="ext-v2-card-desc">' + desc + '</div>' +
+                    '<div class="ext-v2-card-meta">Paquete: ' + pkg + ' • Firma: ' + idf + '</div>' +
+                '</div>' +
+                '<div class="ext-v2-card-actions">' +
+                    '<span class="ext-v2-status ext-v2-status-active">Instalada</span>' +
+                    '<button class="ext-v2-btn-uninstall apphub-uninstall-btn" data-pkg="' + dataPkg + '" title="Desinstalar"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>' +
+                '</div>' +
+            '</div>';
+        });
+        container.innerHTML = html;
+        container.querySelectorAll('.apphub-uninstall-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var pkg = decodeURIComponent(btn.getAttribute('data-pkg') || '');
+                app.uninstallDexApp(pkg);
+            });
+        });
+    },
+
+    renderDexAvailableDebs: function(list) {
+        var container = document.getElementById('apphub-available-list');
+        if (!container) return;
+        if (!list.length) {
+            container.innerHTML = '<div class="ext-v2-empty"><i data-lucide="file-archive" style="width:28px;height:28px;color:var(--text-tertiary)"></i><p>No se encontraron paquetes .deb en proyectos</p></div>';
+            return;
+        }
+        var html = '';
+        list.forEach(function(item) {
+            var name = app.escapeHtml(item.name || item.package || 'Paquete DEX');
+            var pkgRaw = String(item.package || '');
+            var pkg = app.escapeHtml(pkgRaw || '-');
+            var ver = app.escapeHtml(item.version || '-');
+            var idf = app.escapeHtml(item.identifier || '-');
+            var sec = app.escapeHtml(item.section || '-');
+            var desc = app.escapeHtml(item.description || 'Sin descripción');
+            var debPath = String(item.deb_path || '');
+            var dataDeb = encodeURIComponent(debPath);
+            var dataPkg = encodeURIComponent(pkgRaw);
+            var installBtn = item.installed
+                ? '<span class="ext-v2-status ext-v2-status-active">Instalada</span>'
+                : '<button class="ext-v2-btn-install apphub-install-btn" data-deb="' + dataDeb + '"><i data-lucide="download" style="width:12px;height:12px"></i> Instalar</button>';
+            var uninstallBtn = item.installed
+                ? '<button class="ext-v2-btn-uninstall apphub-uninstall-btn" data-pkg="' + dataPkg + '" title="Desinstalar"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>'
+                : '';
+            html += '<div class="ext-v2-card">' +
+                '<div class="ext-v2-card-icon" style="background:linear-gradient(135deg,#2563eb,#1d4ed8)"><i data-lucide="package"></i></div>' +
+                '<div class="ext-v2-card-body">' +
+                    '<div class="ext-v2-card-title">' + name + ' <span class="ext-v2-version">v' + ver + '</span></div>' +
+                    '<div class="ext-v2-card-desc">' + desc + '</div>' +
+                    '<div class="ext-v2-card-meta">Paquete: ' + pkg + ' • Sección: ' + sec + ' • Firma: ' + idf + '</div>' +
+                '</div>' +
+                '<div class="ext-v2-card-actions">' +
+                    installBtn +
+                    '<button class="ext-v2-btn-enable apphub-download-btn" data-deb="' + dataDeb + '" title="Copiar a Descargas"><i data-lucide="save" style="width:12px;height:12px"></i></button>' +
+                    uninstallBtn +
+                '</div>' +
+            '</div>';
+        });
+        container.innerHTML = html;
+        container.querySelectorAll('.apphub-install-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var deb = decodeURIComponent(btn.getAttribute('data-deb') || '');
+                app.installDexDeb(deb);
+            });
+        });
+        container.querySelectorAll('.apphub-download-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var deb = decodeURIComponent(btn.getAttribute('data-deb') || '');
+                app.downloadDexDeb(deb);
+            });
+        });
+        container.querySelectorAll('.apphub-uninstall-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var pkg = decodeURIComponent(btn.getAttribute('data-pkg') || '');
+                app.uninstallDexApp(pkg);
+            });
+        });
+    },
+
+    _showAppsHubLoader: function(title, msg) {
+        var old = document.getElementById('apphub-action-loader');
+        if (old) old.remove();
+        var overlay = document.createElement('div');
+        overlay.id = 'apphub-action-loader';
+        overlay.className = 'modal-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = '<div class="modal-card modal-sm" style="max-width:460px">' +
+            '<div class="modal-header"><h2>' + this.escapeHtml(title || 'Procesando') + '</h2></div>' +
+            '<div class="modal-body">' +
+                '<p>' + this.escapeHtml(msg || 'Ejecutando acción...') + '</p>' +
+                '<div style="margin-top:12px;display:flex;align-items:center;gap:8px"><i data-lucide="loader" style="width:16px;height:16px;color:var(--accent);animation:spin 1s linear infinite"></i><span style="font-size:12px;color:var(--text-secondary)">Aplicando cambios en el sistema...</span></div>' +
+            '</div>' +
+        '</div>';
+        document.body.appendChild(overlay);
+        this._refreshIcons();
+    },
+
+    _hideAppsHubLoader: function() {
+        var m = document.getElementById('apphub-action-loader');
+        if (m) m.remove();
+    },
+
+    installDexDeb: async function(debPath) {
+        if (!debPath) return;
+        this._showAppsHubLoader('Instalando aplicación', 'Aplicando paquete .deb y resolviendo dependencias...');
+        try {
+            var res = await window.pywebview.api.install_dex_deb(debPath);
+            this._hideAppsHubLoader();
+            if (res && res.success) {
+                this.showNotification('Apps Hub', res.message || 'App instalada', 'success', 3200);
+                this.log('Apps Hub: ' + (res.message || 'Aplicación instalada'));
+                this._dexAppsLoaded = false;
+                await this.loadDexAppsHub(true);
+            } else {
+                this.showNotification('Apps Hub', (res && res.error) || 'No se pudo instalar', 'error', 4200);
+                this.log('Apps Hub install error: ' + ((res && (res.error || res.stdout)) || 'desconocido'), true);
+            }
+        } catch (e) {
+            this._hideAppsHubLoader();
+            this.showNotification('Apps Hub', e.message, 'error', 4200);
+            this.log('Apps Hub install error: ' + e.message, true);
+        }
+    },
+
+    uninstallDexApp: async function(packageName) {
+        if (!packageName) return;
+        if (!confirm('¿Desinstalar paquete \"' + packageName + '\"?')) return;
+        this._showAppsHubLoader('Desinstalando aplicación', 'Eliminando paquete del sistema...');
+        try {
+            var res = await window.pywebview.api.uninstall_dex_app(packageName);
+            this._hideAppsHubLoader();
+            if (res && res.success) {
+                this.showNotification('Apps Hub', res.message || 'App desinstalada', 'info', 3200);
+                this.log('Apps Hub: ' + (res.message || 'Aplicación desinstalada'));
+                this._dexAppsLoaded = false;
+                await this.loadDexAppsHub(true);
+            } else {
+                this.showNotification('Apps Hub', (res && res.error) || 'No se pudo desinstalar', 'error', 4200);
+                this.log('Apps Hub uninstall error: ' + ((res && (res.error || res.stdout)) || 'desconocido'), true);
+            }
+        } catch (e) {
+            this._hideAppsHubLoader();
+            this.showNotification('Apps Hub', e.message, 'error', 4200);
+            this.log('Apps Hub uninstall error: ' + e.message, true);
+        }
+    },
+
+    downloadDexDeb: async function(debPath) {
+        if (!debPath) return;
+        this._showAppsHubLoader('Copiando paquete', 'Enviando archivo .deb a Downloads...');
+        try {
+            var res = await window.pywebview.api.download_dex_deb(debPath);
+            this._hideAppsHubLoader();
+            if (res && res.success) {
+                this.showNotification('Apps Hub', 'Copiado: ' + (res.path || 'Downloads'), 'success', 3500);
+                this.log('Apps Hub: .deb copiado -> ' + (res.path || 'Downloads'));
+            } else {
+                this.showNotification('Apps Hub', (res && res.error) || 'No se pudo copiar el .deb', 'error', 4200);
+                this.log('Apps Hub download error: ' + ((res && (res.error || res.stdout)) || 'desconocido'), true);
+            }
+        } catch (e) {
+            this._hideAppsHubLoader();
+            this.showNotification('Apps Hub', e.message, 'error', 4200);
+            this.log('Apps Hub download error: ' + e.message, true);
+        }
+    },
+
     _marketplaceLoaded: false,
 
     log: function(msg, isError = false) {
@@ -1233,12 +1496,33 @@ const app = {
         // Actualizar breadcrumb
         const breadcrumbText = document.getElementById('breadcrumb-text');
         if (breadcrumbText) {
-            breadcrumbText.textContent = viewId.charAt(0).toUpperCase() + viewId.slice(1);
+            var labels = {
+                'home': 'Inicio',
+                'editor': 'Explorador',
+                'new': 'Nuevo Proyecto',
+                'extensions': 'Extensiones',
+                'apps-hub': 'Apps Linux (DEX)',
+                'sdk-reference': 'SDK Reference',
+                'settings': 'Configuración'
+            };
+            breadcrumbText.textContent = labels[viewId] || (viewId.charAt(0).toUpperCase() + viewId.slice(1));
         }
         
         // Activar botón nav correspondiente
         const navItems = document.querySelectorAll('[data-view="' + viewId + '"]');
         navItems.forEach(item => item.classList.add('active'));
+
+        if (viewId === 'apps-hub') this.loadDexAppsHub();
+        this.updateTopActionButtonsVisibility(viewId);
+    },
+
+    updateTopActionButtonsVisibility: function(viewId) {
+        var actions = document.getElementById('top-action-buttons') || document.querySelector('.action-buttons');
+        if (!actions) return;
+        var currentView = viewId || (document.querySelector('.view-section.active') || {}).id || '';
+        currentView = currentView.replace(/^view-/, '');
+        var visible = !!this.currentProjectPath && currentView === 'editor';
+        actions.style.display = visible ? '' : 'none';
     },
 
     switchSettingsCat: function(cat) {
@@ -2401,9 +2685,17 @@ const app = {
         var interp = (interpreter && interpreter.value) ? interpreter.value : 'python3';
         var extraArgs = (args && args.value) ? ' ' + args.value : '';
 
+        if (this.isPythonRuntime(interp, mf)) {
+            var ready = await this.ensurePythonDependencies(mf, interp);
+            if (!ready) {
+                this.log('⚠ Ejecución cancelada por dependencias faltantes', true);
+                return;
+            }
+        }
+
         this.log('▶ Ejecutando: ' + interp + ' ' + mf + extraArgs);
         try {
-            var cmd = 'cd "' + this.currentProjectPath + '" && timeout 30 ' + interp + ' ' + mf + extraArgs + ' 2>&1 || true';
+            var cmd = 'cd "' + this.currentProjectPath + '" && timeout 30 ' + interp + ' ' + mf + extraArgs + ' 2>&1';
             var res = await window.pywebview.api.run_command(cmd);
             if (res.success) {
                 if (res.stdout) this.log(res.stdout);
@@ -2417,6 +2709,275 @@ const app = {
         } catch(e) {
             this.log('Error: ' + e.message, true);
         }
+    },
+
+    isPythonRuntime: function(interpreter, mainFile) {
+        var interp = (interpreter || '').toLowerCase();
+        var mf = (mainFile || '').toLowerCase();
+        return interp.includes('python') || mf.endsWith('.py');
+    },
+
+    ensurePythonDependencies: async function(mainFile, interpreter) {
+        try {
+            var detectRes = await window.pywebview.api.detect_missing_python_modules(mainFile, interpreter);
+            if (!detectRes || !detectRes.success) {
+                this.log('Chequeo backend de dependencias no disponible, usando fallback...', true);
+                detectRes = await this.detectMissingPythonModulesFallback(mainFile, interpreter);
+            }
+            if (!detectRes || !detectRes.success) {
+                this.log('No se pudo verificar dependencias Python: ' + ((detectRes && detectRes.error) || 'desconocido'), true);
+                this.showNotification('Dependencias', 'No se pudo verificar módulos faltantes', 'warning', 2800);
+                return true;
+            }
+            var missing = Array.isArray(detectRes.missing_modules) ? detectRes.missing_modules : [];
+            if (!missing.length) return true;
+
+            var install = await this.promptInstallMissingPythonModules(missing, interpreter, mainFile);
+            if (!install) return false;
+
+            return await this.installMissingPythonModulesWithLoader(missing, interpreter);
+        } catch (e) {
+            this.log('Error verificando dependencias: ' + e.message, true);
+            return true;
+        }
+    },
+
+    detectMissingPythonModulesFallback: async function(mainFile, interpreter) {
+        try {
+            var mf = (mainFile || 'main.py').replace(/'/g, "'\"'\"'");
+            var interp = interpreter || 'python3';
+            var cmd = interp + " - <<'PY'\\n" +
+                "import ast, os, sys, json, importlib.util\\n" +
+                "main_file = '" + mf + "'\\n" +
+                "resp = {'success': True, 'missing_modules': []}\\n" +
+                "try:\\n" +
+                "    with open(main_file, 'r', encoding='utf-8') as f:\\n" +
+                "        src = f.read()\\n" +
+                "    tree = ast.parse(src, filename=main_file)\\n" +
+                "    imports = set()\\n" +
+                "    for n in ast.walk(tree):\\n" +
+                "        if isinstance(n, ast.Import):\\n" +
+                "            for a in n.names:\\n" +
+                "                m = (a.name or '').split('.')[0].strip()\\n" +
+                "                if m: imports.add(m)\\n" +
+                "        elif isinstance(n, ast.ImportFrom):\\n" +
+                "            if getattr(n, 'level', 0):\\n" +
+                "                continue\\n" +
+                "            m = (n.module or '').split('.')[0].strip()\\n" +
+                "            if m: imports.add(m)\\n" +
+                "    local_mods = set()\\n" +
+                "    for item in os.listdir('.'):\\n" +
+                "        if item.endswith('.py'):\\n" +
+                "            local_mods.add(item[:-3])\\n" +
+                "        if os.path.isdir(item) and os.path.exists(os.path.join(item, '__init__.py')):\\n" +
+                "            local_mods.add(item)\\n" +
+                "    for m in sorted(imports):\\n" +
+                "        if m in local_mods:\\n" +
+                "            continue\\n" +
+                "        try:\\n" +
+                "            importlib.import_module(m)\\n" +
+                "        except Exception:\\n" +
+                "            pkg_map = {'cv2':'opencv-python','PIL':'Pillow','yaml':'PyYAML','Crypto':'pycryptodome','sklearn':'scikit-learn','bs4':'beautifulsoup4','tkinter':'apt:python3-tk','Tkinter':'apt:python3-tk'}\\n" +
+                "            resp['missing_modules'].append({'module': m, 'package': pkg_map.get(m, m)})\\n" +
+                "except Exception as e:\\n" +
+                "    resp = {'success': False, 'error': str(e), 'missing_modules': []}\\n" +
+                "print('DEX_JSON:' + json.dumps(resp))\\n" +
+                "PY";
+
+            var res = await window.pywebview.api.run_command(cmd);
+            var out = ((res && res.stdout) || '') + '\\n' + ((res && res.stderr) || '');
+            var line = out.split('\\n').find(function(l) { return l.indexOf('DEX_JSON:') === 0; });
+            if (!line) return { success: False, error: 'No se pudo parsear respuesta fallback' };
+            return JSON.parse(line.substring('DEX_JSON:'.length));
+        } catch (e) {
+            return { success: False, error: e.message, missing_modules: [] };
+        }
+    },
+
+    promptInstallMissingPythonModules: function(missing, interpreter, mainFile) {
+        return new Promise((resolve) => {
+            var old = document.getElementById('py-missing-modal');
+            if (old) old.remove();
+
+            var listHtml = missing.map(function(item) {
+                var mod = item.module || item.package || 'unknown';
+                var pkg = item.package || mod;
+                return '<li><code>' + mod + '</code> → <code>' + pkg + '</code></li>';
+            }).join('');
+
+            var overlay = document.createElement('div');
+            overlay.id = 'py-missing-modal';
+            overlay.className = 'modal-overlay';
+            overlay.style.display = 'flex';
+            overlay.innerHTML =
+                '<div class="modal-card modal-sm" style="max-width:540px">' +
+                    '<div class="modal-header"><h2>Dependencias Python faltantes</h2></div>' +
+                    '<div class="modal-body">' +
+                        '<p>Faltan módulos para ejecutar <code>' + mainFile + '</code> con <code>' + interpreter + '</code>.</p>' +
+                        '<ul style="margin:8px 0 0 18px;max-height:180px;overflow:auto">' + listHtml + '</ul>' +
+                        '<p style="margin-top:10px;color:var(--text-secondary)">¿Deseas instalarlos automáticamente ahora?</p>' +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button class="btn-secondary btn-sm" id="py-missing-cancel">Cancelar</button>' +
+                        '<button class="btn-primary btn-sm" id="py-missing-install">Instalar</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(overlay);
+            this._refreshIcons();
+
+            var cleanup = function(val) {
+                if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve(val);
+            };
+            overlay.querySelector('#py-missing-cancel').onclick = function() { cleanup(false); };
+            overlay.querySelector('#py-missing-install').onclick = function() { cleanup(true); };
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) cleanup(false);
+            });
+        });
+    },
+
+    installMissingPythonModulesWithLoader: async function(missing, interpreter) {
+        var existing = document.getElementById('py-install-loader');
+        if (existing) existing.remove();
+
+        var total = Math.max(8, (missing.length || 1) * 8);
+        var remaining = total;
+
+        var overlay = document.createElement('div');
+        overlay.id = 'py-install-loader';
+        overlay.className = 'modal-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML =
+            '<div class="modal-card modal-sm" style="max-width:520px">' +
+                '<div class="modal-header"><h2>Instalando dependencias</h2></div>' +
+                '<div class="modal-body">' +
+                    '<p>Instalando paquetes con <code>' + interpreter + '</code>...</p>' +
+                    '<div style="margin-top:10px;background:var(--bg-secondary);border-radius:10px;overflow:hidden;height:10px">' +
+                        '<div id="py-install-progress" style="height:100%;width:0;background:linear-gradient(90deg,#22c55e,#16a34a)"></div>' +
+                    '</div>' +
+                    '<p id="py-install-eta" style="margin-top:8px;color:var(--text-secondary)">Tiempo estimado: ~' + total + 's</p>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var bar = overlay.querySelector('#py-install-progress');
+        var eta = overlay.querySelector('#py-install-eta');
+
+        var timer = setInterval(function() {
+            remaining = Math.max(0, remaining - 1);
+            var done = total - remaining;
+            var pct = Math.min(100, Math.round((done / total) * 100));
+            if (bar) bar.style.width = pct + '%';
+            if (eta) eta.textContent = 'Tiempo estimado restante: ~' + remaining + 's';
+        }, 1000);
+
+        try {
+            var res = await this.installPythonModulesSmart(missing, interpreter);
+            clearInterval(timer);
+            if (bar) bar.style.width = '100%';
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+
+            if (res && res.success) {
+                this.log('✓ Dependencias instaladas: ' + (res.installed_packages || []).join(', '));
+                this.showNotification('Dependencias', 'Módulos instalados correctamente', 'success');
+                return true;
+            }
+
+            var err = (res && (res.error || res.stderr)) || 'No se pudo instalar dependencias';
+            this.log(err, true);
+            this.showNotification('Error de Dependencias', 'No se pudieron instalar los módulos', 'error', 4500);
+            return false;
+        } catch (e) {
+            clearInterval(timer);
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            this.log('Error instalando dependencias: ' + e.message, true);
+            this.showNotification('Error de Dependencias', e.message, 'error', 4500);
+            return false;
+        }
+    },
+
+    installPythonModulesSmart: async function(missing, interpreter) {
+        try {
+            if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.install_python_modules === 'function') {
+                return await window.pywebview.api.install_python_modules(missing, interpreter);
+            }
+        } catch (e) {}
+
+        var interp = interpreter || 'python3';
+        var pkgs = (missing || []).map(function(item) {
+            if (typeof item === 'string') return item;
+            return (item.package || item.module || '').trim();
+        }).filter(Boolean);
+        pkgs = Array.from(new Set(pkgs));
+        if (!pkgs.length) return { success: false, error: 'No hay paquetes para instalar' };
+
+        var quoted = pkgs.map(function(p) {
+            return "'" + p.replace(/'/g, "'\"'\"'") + "'";
+        }).join(' ');
+        var cmd = interp + " -m pip install --user " + quoted + " 2>&1";
+        var aptPkgs = pkgs.filter(function(p) { return p.indexOf('apt:') === 0; }).map(function(p) { return p.slice(4); });
+        var pipPkgs = pkgs.filter(function(p) { return p.indexOf('apt:') !== 0; });
+
+        var combinedOut = '';
+        var combinedErr = '';
+        var finalCode = 0;
+
+        if (aptPkgs.length) {
+            var aptQuoted = aptPkgs.map(function(p) { return "'" + p.replace(/'/g, "'\"'\"'") + "'"; }).join(' ');
+            var aptCmd = "sudo apt-get install -y " + aptQuoted + " 2>&1 || apt-get install -y " + aptQuoted + " 2>&1";
+            var aptRes = await window.pywebview.api.run_command(aptCmd);
+            combinedOut += (aptRes && aptRes.stdout) ? aptRes.stdout : '';
+            combinedErr += (aptRes && aptRes.stderr) ? aptRes.stderr : '';
+            finalCode = (aptRes && typeof aptRes.code !== 'undefined') ? aptRes.code : 1;
+            if (!aptRes || !aptRes.success || finalCode !== 0) {
+                return {
+                    success: false,
+                    installed_packages: pkgs,
+                    stdout: combinedOut,
+                    stderr: combinedErr,
+                    code: finalCode,
+                    error: combinedErr || combinedOut || 'No se pudo instalar paquetes del sistema'
+                };
+            }
+        }
+
+        if (pipPkgs.length) {
+            var pipQuoted = pipPkgs.map(function(p) { return "'" + p.replace(/'/g, "'\"'\"'") + "'"; }).join(' ');
+            cmd = interp + " -m pip install --user " + pipQuoted + " 2>&1";
+            var res = await window.pywebview.api.run_command(cmd);
+            combinedOut += (res && res.stdout) ? ('\n' + res.stdout) : '';
+            combinedErr += (res && res.stderr) ? ('\n' + res.stderr) : '';
+            finalCode = (res && typeof res.code !== 'undefined') ? res.code : 1;
+            if (!res || !res.success || finalCode !== 0) {
+                return {
+                    success: false,
+                    installed_packages: pkgs,
+                    stdout: combinedOut,
+                    stderr: combinedErr,
+                    code: finalCode,
+                    error: combinedErr || combinedOut || 'No se pudo instalar paquetes'
+                };
+            }
+        }
+
+        if (finalCode === 0) {
+            return {
+                success: true,
+                installed_packages: pkgs,
+                stdout: combinedOut,
+                stderr: combinedErr,
+                code: 0
+            };
+        }
+        return {
+            success: false,
+            installed_packages: pkgs,
+            stdout: combinedOut,
+            stderr: combinedErr,
+            code: finalCode || 1,
+            error: (combinedErr || combinedOut || 'No se pudo instalar paquetes')
+        };
     },
 
     saveRunConfig: async function() {
@@ -4503,27 +5064,95 @@ const app = {
         this.log('Preview MD abierto');
     },
 
+    moveCursorToLine: function(lineNo) {
+        var editor = document.getElementById('code-editor');
+        if (!editor || !lineNo || lineNo < 1) return;
+        var lines = editor.value.split('\n');
+        var idx = 0;
+        for (var i = 0; i < Math.min(lineNo - 1, lines.length); i++) {
+            idx += lines[i].length + 1;
+        }
+        editor.focus();
+        editor.selectionStart = editor.selectionEnd = idx;
+        var lh = 18;
+        editor.scrollTop = Math.max(0, (lineNo - 3) * lh);
+    },
+
     searchInProject: async function() {
         const searchInput = document.querySelector('.search-input');
         const query = searchInput ? searchInput.value.trim() : '';
         if (!query) {
-            this.log('Escribe algo en el campo de búsqueda', true);
+            this.showNotification('Buscar', 'Escribe algo para buscar', 'warning', 1800);
             return;
         }
-        if (!this.currentProjectPath) {
-            this.log('Abre un proyecto primero para buscar', true);
-            return;
-        }
-        this.log('Buscando: "' + query + '"...');
-        try {
-            const res = await window.pywebview.api.run_command('grep -rnl "' + query + '" "' + this.currentProjectPath + '" --include="*.py" --include="*.js" --include="*.html" --include="*.css" --include="*.json" --include="*.md" --include="*.txt" 2>/dev/null || echo "Sin resultados"');
-            if (res.success && res.stdout) {
-                this.log('Resultados:\n' + res.stdout);
-            } else {
-                this.log('Sin resultados para: "' + query + '"');
+
+        const q = query.toLowerCase();
+        const quick = [
+            { keys: ['inicio', 'home'], fn: () => this.showView('home') },
+            { keys: ['nuevo', 'crear'], fn: () => this.showView('new') },
+            { keys: ['abrir proyecto', 'open project'], fn: () => this.openProject() },
+            { keys: ['extensiones', 'marketplace'], fn: () => { this.showView('extensions'); if (q.includes('market')) this.switchExtTab('marketplace'); } },
+            { keys: ['apps', 'deb', 'paquetes'], fn: () => this.showView('apps-hub') },
+            { keys: ['config', 'ajustes', 'settings'], fn: () => this.showView('settings') },
+            { keys: ['sdk', 'documentacion', 'docs'], fn: () => this.showView('sdk-reference') },
+            { keys: ['ejecutar', 'run'], fn: () => { if (this.currentProjectPath) this.runProject(); } },
+            { keys: ['compilar', 'build'], fn: () => { if (this.currentProjectPath) this.compileProject(); } }
+        ];
+        for (const item of quick) {
+            if (item.keys.some(k => q === k || q.includes(k))) {
+                item.fn();
+                this.showNotification('Buscar', 'Acción rápida: ' + query, 'info', 1400);
+                return;
             }
-        } catch(e) {
+        }
+
+        if (!this.currentProjectPath) {
+            this.showNotification('Buscar', 'Abre un proyecto para buscar archivos/contenido', 'warning', 2400);
+            return;
+        }
+
+        this.showView('editor');
+        this.log('🔎 Buscando: "' + query + '"...');
+        const safeQuery = query.replace(/'/g, "'\"'\"'");
+        const safeProject = this.currentProjectPath.replace(/"/g, '\\"');
+        try {
+            // 1) Buscar coincidencias por contenido y abrir el primer match
+            let cmd = 'cd "' + safeProject + '" && grep -RIn --exclude-dir=.git --exclude-dir=build --exclude-dir=__pycache__ --binary-files=without-match -e \'' + safeQuery + '\' . 2>/dev/null | head -n 40';
+            let res = await window.pywebview.api.run_command(cmd);
+            let lines = (res && res.stdout ? res.stdout : '').trim().split('\n').filter(Boolean);
+            if (lines.length > 0) {
+                const first = lines[0];
+                // format: ./path:line:content
+                const m = first.match(/^\.\/([^:]+):(\d+):(.*)$/);
+                if (m) {
+                    const rel = m[1];
+                    const ln = parseInt(m[2], 10) || 1;
+                    const path = this.currentProjectPath + '/' + rel;
+                    await this.openFile(path);
+                    this.moveCursorToLine(ln);
+                    this.showNotification('Buscar', 'Abierto: ' + rel + ' (línea ' + ln + ')', 'success', 2200);
+                    this.log('Coincidencias: ' + lines.length + '. Abierto: ' + rel + ':' + ln);
+                    return;
+                }
+            }
+
+            // 2) Buscar por nombre de archivo
+            cmd = 'cd "' + safeProject + '" && find . -type f -iname \'*' + safeQuery + '*\' 2>/dev/null | head -n 40';
+            res = await window.pywebview.api.run_command(cmd);
+            lines = (res && res.stdout ? res.stdout : '').trim().split('\n').filter(Boolean);
+            if (lines.length > 0) {
+                const rel = lines[0].replace(/^\.\//, '');
+                await this.openFile(this.currentProjectPath + '/' + rel);
+                this.showNotification('Buscar', 'Archivo encontrado: ' + rel, 'success', 2200);
+                this.log('Resultado por nombre: ' + rel);
+                return;
+            }
+
+            this.showNotification('Buscar', 'Sin resultados para "' + query + '"', 'info', 2200);
+            this.log('Sin resultados para: "' + query + '"');
+        } catch (e) {
             this.log('Error en búsqueda: ' + e.message, true);
+            this.showNotification('Buscar', 'Error al buscar', 'error', 2600);
         }
     }
 };
