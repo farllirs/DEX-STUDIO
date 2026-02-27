@@ -20,7 +20,9 @@ def main():
         width=1280,
         height=800,
         min_size=(1000, 700),
-        background_color='#0a0a0c'
+        background_color='#0a0a0c',
+        frameless=True,
+        easy_drag=False
     )
     
     # Inyectar referencia de ventana en la API

@@ -11,6 +11,7 @@ from backend.extensions_db import ExtensionsDB
 class API:
     def __init__(self):
         self.window = None
+        self._window_maximized = False
         self.current_project_path = None
         self.projects_root = os.path.join(os.path.expanduser("~"), 'DEX_Projects')
         os.makedirs(self.projects_root, exist_ok=True)
@@ -39,6 +40,38 @@ class API:
         if self.window:
             return {'success': True, 'message': 'Usa CTRL+SHIFT+I para inspeccionar (Modo Debug Activo)'}
         return {'success': False}
+
+    def window_minimize(self):
+        try:
+            if not self.window:
+                return {'success': False, 'error': 'Ventana no inicializada'}
+            self.window.minimize()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def window_toggle_maximize(self):
+        try:
+            if not self.window:
+                return {'success': False, 'error': 'Ventana no inicializada'}
+            if self._window_maximized:
+                self.window.restore()
+                self._window_maximized = False
+            else:
+                self.window.maximize()
+                self._window_maximized = True
+            return {'success': True, 'maximized': self._window_maximized}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def window_close(self):
+        try:
+            if not self.window:
+                return {'success': False, 'error': 'Ventana no inicializada'}
+            self.window.destroy()
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
     def get_home_dir(self):
         return os.path.expanduser("~")
@@ -189,7 +222,10 @@ class API:
                 '{{CREATOR}}': metadata['creator'],
                 '{{VERSION}}': metadata['version'],
                 '{{DESCRIPTION}}': metadata.get('description', ''),
-                '{{IDENTIFIER}}': metadata['identifier']
+                '{{IDENTIFIER}}': metadata['identifier'],
+                '{{EXT_CATEGORY}}': metadata.get('ext_category', 'editor'),
+                '{{EXT_ICON}}': metadata.get('ext_icon', 'puzzle'),
+                '{{EXT_COLOR}}': metadata.get('ext_color', 'linear-gradient(135deg, #667eea, #764ba2)')
             }
 
             if os.path.exists(template_dir):
@@ -214,6 +250,39 @@ class API:
             if template_type in ('Extension', 'Blank'):
                 with open(os.path.join(base_path, 'metadata.json'), 'w') as f:
                     json.dump(metadata, f, indent=4)
+
+            # Generate theme.css scaffold for theme/ui-theme extensions
+            if template_type == 'Extension' and metadata.get('ext_category') in ('theme', 'ui-theme'):
+                theme_css_path = os.path.join(base_path, 'theme.css')
+                if not os.path.exists(theme_css_path):
+                    with open(theme_css_path, 'w', encoding='utf-8') as f:
+                        f.write(""":root {
+    /* ── Fondos ── */
+    --bg-base:              #1e1e2e;
+    --bg-surface:           #313244;
+    --bg-elevated:          #45475a;
+    --bg-overlay:           #585b70;
+
+    /* ── Texto ── */
+    --text-primary:         rgba(205, 214, 244, 0.92);
+    --text-secondary:       rgba(166, 173, 200, 0.60);
+    --text-tertiary:        rgba(127, 132, 156, 0.30);
+
+    /* ── Acento ── */
+    --accent:               #89b4fa;
+    --accent-hover:         #74c7ec;
+    --accent-subtle:        rgba(137, 180, 250, 0.10);
+
+    /* ── Bordes ── */
+    --border:               rgba(137, 180, 250, 0.10);
+    --border-strong:        rgba(137, 180, 250, 0.20);
+
+    /* ── Estados ── */
+    --success:              #a6e3a1;
+    --warning:              #f9e2af;
+    --error:                #f38ba8;
+}
+""")
             
             # Blank project: create minimal main.py
             if template_type == 'Blank':
@@ -420,6 +489,160 @@ class API:
             token_path = os.path.join(os.path.expanduser("~"), '.dex-studio', 'github_token')
             if os.path.exists(token_path):
                 os.remove(token_path)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    # ── UI Themes & Layouts ──────────────────────────────────────────
+
+    def get_ui_themes(self):
+        """Scan installed extensions for UI layout themes (ui-theme)"""
+        try:
+            ext_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            themes = []
+            if not os.path.exists(ext_dir):
+                return {'success': True, 'themes': []}
+            for item in os.listdir(ext_dir):
+                item_path = os.path.join(ext_dir, item)
+                if not os.path.isdir(item_path):
+                    continue
+                manifest_path = os.path.join(item_path, 'manifest.json')
+                if not os.path.exists(manifest_path):
+                    continue
+                try:
+                    with open(manifest_path, 'r', encoding='utf-8') as f:
+                        manifest = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    continue
+                is_theme = (manifest.get('category') == 'ui-theme' or
+                            manifest.get('type') == 'ui-theme')
+                css_path = os.path.join(item_path, 'theme.css')
+                has_css = os.path.exists(css_path)
+                if not is_theme or not has_css:
+                    continue
+                themes.append({
+                    'id': item,
+                    'name': manifest.get('name', item),
+                    'description': manifest.get('description', ''),
+                    'css_path': css_path if has_css else None,
+                    'colors': manifest.get('colors', {})
+                })
+            return {'success': True, 'themes': themes}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_normal_themes(self):
+        """Scan installed extensions for normal themes (category: theme)"""
+        try:
+            ext_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'extensions')
+            themes = []
+            if not os.path.exists(ext_dir):
+                return {'success': True, 'themes': []}
+
+            for item in os.listdir(ext_dir):
+                item_path = os.path.join(ext_dir, item)
+                if not os.path.isdir(item_path):
+                    continue
+                manifest_path = os.path.join(item_path, 'manifest.json')
+                css_path = os.path.join(item_path, 'theme.css')
+                if not os.path.exists(manifest_path) or not os.path.exists(css_path):
+                    continue
+                try:
+                    with open(manifest_path, 'r', encoding='utf-8') as f:
+                        manifest = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+                category = manifest.get('category')
+                ext_type = manifest.get('type')
+                is_normal_theme = (category == 'theme' and ext_type != 'ui-theme')
+                if not is_normal_theme:
+                    continue
+
+                themes.append({
+                    'id': item,
+                    'name': manifest.get('name', item),
+                    'description': manifest.get('description', ''),
+                    'css_path': css_path,
+                    'colors': manifest.get('colors', {})
+                })
+
+            return {'success': True, 'themes': themes}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def load_ui_theme(self, theme_id):
+        """Load CSS content for a UI theme extension"""
+        try:
+            css_path = os.path.join(os.path.expanduser("~"), '.dex-studio',
+                                    'extensions', theme_id, 'theme.css')
+            if not os.path.exists(css_path):
+                return {'success': False, 'error': f'theme.css no encontrado para "{theme_id}"'}
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css = f.read()
+            return {'success': True, 'css': css}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def load_normal_theme(self, theme_id):
+        """Load CSS content for a normal theme extension"""
+        try:
+            css_path = os.path.join(os.path.expanduser("~"), '.dex-studio',
+                                    'extensions', theme_id, 'theme.css')
+            if not os.path.exists(css_path):
+                return {'success': False, 'error': f'theme.css no encontrado para "{theme_id}"'}
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css = f.read()
+            return {'success': True, 'css': css}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def save_custom_ui_layout(self, layout_name, layout_data):
+        """Save a custom UI layout configuration"""
+        try:
+            layouts_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'layouts')
+            os.makedirs(layouts_dir, exist_ok=True)
+            layout_path = os.path.join(layouts_dir, f'{layout_name}.json')
+            with open(layout_path, 'w', encoding='utf-8') as f:
+                json.dump(layout_data, f, indent=4)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def load_custom_ui_layout(self, layout_name):
+        """Load a UI layout configuration"""
+        try:
+            layout_path = os.path.join(os.path.expanduser("~"), '.dex-studio',
+                                       'layouts', f'{layout_name}.json')
+            if not os.path.exists(layout_path):
+                return {'success': False, 'error': f'Layout "{layout_name}" no encontrado'}
+            with open(layout_path, 'r', encoding='utf-8') as f:
+                layout = json.load(f)
+            return {'success': True, 'layout': layout}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def list_ui_layouts(self):
+        """List all saved UI layouts"""
+        try:
+            layouts_dir = os.path.join(os.path.expanduser("~"), '.dex-studio', 'layouts')
+            if not os.path.exists(layouts_dir):
+                return {'success': True, 'layouts': []}
+            layouts = []
+            for f in os.listdir(layouts_dir):
+                if f.endswith('.json'):
+                    layouts.append(os.path.splitext(f)[0])
+            return {'success': True, 'layouts': layouts}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def delete_ui_layout(self, layout_name):
+        """Delete a saved UI layout"""
+        try:
+            layout_path = os.path.join(os.path.expanduser("~"), '.dex-studio',
+                                       'layouts', f'{layout_name}.json')
+            if os.path.exists(layout_path):
+                os.remove(layout_path)
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}

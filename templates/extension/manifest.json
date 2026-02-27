@@ -4,7 +4,7 @@
     "version": "{{VERSION}}",
     "description": "{{DESCRIPTION}}",
     "author": "{{CREATOR}}",
-    "category": "editor",
-    "icon": "puzzle",
-    "color": "linear-gradient(135deg, #667eea, #764ba2)"
+    "category": "{{EXT_CATEGORY}}",
+    "icon": "{{EXT_ICON}}",
+    "color": "{{EXT_COLOR}}"
 }

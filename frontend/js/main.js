@@ -629,6 +629,13 @@ const app = {
     _isExtensionProject: false,
     _extensionTestMode: false,
     _testExtId: null,
+    _activeUIThemeVars: [],
+    _activeNormalThemeVars: [],
+    _windowDragEnabled: true,
+    _customSyntaxThemeId: null,
+    _customSyntaxConfig: null,
+    _customSyntaxColorCache: {},
+    _uiThemesBetaDisabled: true,
 
     _settings: {},
 
@@ -648,7 +655,8 @@ const app = {
         this._splashProgress(10, 'Cargando interfaz...');
         // Defaults — will be overridden by editor-config.json when backend is ready
         this.loadThemes();
-        this.log("DEX STUDIO v1.0.2 — Creador de Apps para Linux");
+        this.toggleWindowDragLock(true);
+        this.log("DEX STUDIO v1.0.3 — Creador de Apps para Linux");
         document.getElementById('breadcrumb-text').textContent = 'Inicio';
 
         // Keyboard shortcuts
@@ -656,6 +664,9 @@ const app = {
             if (e.ctrlKey && e.shiftKey && e.key === 'P') {
                 e.preventDefault();
                 this.showCommandPalette();
+            } else if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                this.showView('sdk-reference');
             } else if (e.ctrlKey && e.key === 's') {
                 e.preventDefault();
                 this.saveFile();
@@ -1107,6 +1118,7 @@ const app = {
         // Remover clases active de todas las vistas
         document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.activity-icon').forEach(b => b.classList.remove('active'));
         
         // Activar vista seleccionada
         const view = document.getElementById('view-' + viewId);
@@ -1125,23 +1137,353 @@ const app = {
         navItems.forEach(item => item.classList.add('active'));
     },
 
+    switchSettingsCat: function(cat) {
+        document.querySelectorAll('.settings-v2-nav').forEach(function(n) {
+            n.classList.toggle('active', n.getAttribute('data-settings-cat') === cat);
+        });
+        document.querySelectorAll('.settings-v2-panel').forEach(function(p) {
+            p.classList.remove('active');
+        });
+        var panel = document.getElementById('settings-panel-' + cat);
+        if (panel) panel.classList.add('active');
+        if (cat === 'appearance') this.loadNormalThemes();
+        if (cat === 'themes') this.loadUIThemes();
+        app._refreshIcons();
+    },
+
+    switchSdkCat: function(cat) {
+        document.querySelectorAll('.sdk-ref-nav').forEach(function(n) {
+            n.classList.toggle('active', n.getAttribute('data-sdk-cat') === cat);
+        });
+        document.querySelectorAll('.sdk-ref-panel').forEach(function(p) {
+            p.classList.remove('active');
+        });
+        var panel = document.getElementById('sdk-panel-' + cat);
+        if (panel) panel.classList.add('active');
+    },
+
+    toggleWordWrap: function() {
+        var editor = document.getElementById('code-editor');
+        var highlight = document.getElementById('code-highlight');
+        var isWrapped = editor.style.whiteSpace !== 'pre';
+        [editor, highlight].forEach(function(el) {
+            if (el) {
+                el.style.whiteSpace = isWrapped ? 'pre' : 'pre-wrap';
+                el.style.wordWrap = isWrapped ? 'normal' : 'break-word';
+            }
+        });
+        this._settings.wordWrap = !isWrapped;
+        this.persistSettings();
+    },
+
+    toggleMinimap: function() {
+        var minimap = document.getElementById('minimap-container');
+        if (minimap) {
+            var isVisible = minimap.style.display !== 'none';
+            minimap.style.display = isVisible ? 'none' : '';
+            this._settings.minimapVisible = !isVisible;
+            this.persistSettings();
+        }
+    },
+
+    changeTabSize: function(size) {
+        this._tabSize = parseInt(size) || 4;
+        this._settings.tabSize = this._tabSize;
+        this.persistSettings();
+    },
+
+    loadUIThemes: async function() {
+        var container = document.getElementById('ui-themes-list');
+        if (!container) return;
+        try {
+            if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_ui_themes) return;
+            var res = await window.pywebview.api.get_ui_themes();
+            if (!res.success || !res.themes || res.themes.length === 0) {
+                container.innerHTML = '<p class="empty-state">No hay temas de interfaz instalados. Descarga uno desde el Marketplace o crea el tuyo.</p>';
+                return;
+            }
+            container.innerHTML = '';
+            var betaDisabled = this._uiThemesBetaDisabled;
+            res.themes.forEach(function(theme) {
+                var card = document.createElement('div');
+                card.className = 'ext-v2-card';
+                card.style.cursor = 'pointer';
+                card.innerHTML = '<div class="ext-v2-card-icon" style="background:' + (theme.colors && theme.colors.accent ? theme.colors.accent : 'var(--accent)') + '"><i data-lucide="paintbrush"></i></div>' +
+                    '<div class="ext-v2-card-body"><div class="ext-v2-card-title">' + theme.name + '</div><div class="ext-v2-card-desc">' + (theme.description || 'Tema de interfaz') + '</div></div>' +
+                    '<button class="ext-v2-btn-install" onclick="app.applyUIThemeExtension(\'' + theme.id + '\')" ' + (betaDisabled ? 'disabled title="Beta: temporalmente fuera de servicio"' : '') + '>' + (betaDisabled ? 'Beta' : 'Aplicar') + '</button>';
+                container.appendChild(card);
+            });
+            app._refreshIcons();
+        } catch(e) {}
+    },
+
+    _clearAppliedUIThemeVars: function() {
+        var root = document.documentElement;
+        (this._activeUIThemeVars || []).forEach(function(varName) {
+            root.style.removeProperty(varName);
+        });
+        this._activeUIThemeVars = [];
+        var existing = document.getElementById('ext-ui-theme-style');
+        if (existing) existing.remove();
+    },
+
+    _applyUIThemeVarsFromCSS: function(cssText) {
+        this._clearAppliedUIThemeVars();
+        if (!cssText) return;
+
+        var root = document.documentElement;
+        var applied = {};
+        var regex = /--([\w-]+)\s*:\s*([^;]+);?/g;
+        var match;
+        while ((match = regex.exec(cssText)) !== null) {
+            var varName = '--' + match[1];
+            var rawValue = (match[2] || '').trim();
+            if (!rawValue) continue;
+            var important = /!important\s*$/i.test(rawValue);
+            var value = rawValue.replace(/\s*!important\s*$/i, '').trim();
+            if (!value) continue;
+            root.style.setProperty(varName, value, important ? 'important' : '');
+            applied[varName] = true;
+        }
+        this._activeUIThemeVars = Object.keys(applied);
+    },
+
+    _clearAppliedNormalThemeVars: function() {
+        var root = document.documentElement;
+        (this._activeNormalThemeVars || []).forEach(function(varName) {
+            root.style.removeProperty(varName);
+        });
+        this._activeNormalThemeVars = [];
+    },
+
+    _applyNormalThemeVarsFromCSS: function(cssText) {
+        this._clearAppliedNormalThemeVars();
+        if (!cssText) return;
+
+        var root = document.documentElement;
+        var applied = {};
+        var regex = /--([\w-]+)\s*:\s*([^;]+);?/g;
+        var match;
+        while ((match = regex.exec(cssText)) !== null) {
+            var varName = '--' + match[1];
+            var rawValue = (match[2] || '').trim();
+            if (!rawValue) continue;
+            var important = /!important\s*$/i.test(rawValue);
+            var value = rawValue.replace(/\s*!important\s*$/i, '').trim();
+            if (!value) continue;
+            root.style.setProperty(varName, value, important ? 'important' : '');
+            applied[varName] = true;
+        }
+        this._activeNormalThemeVars = Object.keys(applied);
+    },
+
+    loadNormalThemes: async function() {
+        var select = document.getElementById('ui-theme');
+        if (!select) return;
+        try {
+            if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_normal_themes) return;
+            var res = await window.pywebview.api.get_normal_themes();
+
+            Array.from(select.querySelectorAll('option[data-ext-theme="1"]')).forEach(function(opt) {
+                opt.remove();
+            });
+
+            if (!res.success || !res.themes || res.themes.length === 0) return;
+            res.themes.forEach(function(theme) {
+                var opt = document.createElement('option');
+                opt.value = 'ext:' + theme.id;
+                opt.textContent = (theme.name || theme.id) + ' (Ext)';
+                opt.setAttribute('data-ext-theme', '1');
+                select.appendChild(opt);
+            });
+        } catch(e) {}
+    },
+
+    _resetCustomSyntaxConfig: function() {
+        this._customSyntaxThemeId = null;
+        this._customSyntaxConfig = null;
+        this._customSyntaxColorCache = {};
+    },
+
+    _sanitizeCustomColor: function(color) {
+        if (!color || typeof color !== 'string') return null;
+        var v = color.trim();
+        if (!v) return null;
+        if (!/^[#(),.%\w\s-]+$/.test(v)) return null;
+        return v;
+    },
+
+    _decodeHtmlToken: function(token) {
+        if (!token) return '';
+        return token
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>');
+    },
+
+    _hashToken: function(token) {
+        var h = 0;
+        for (var i = 0; i < token.length; i++) {
+            h = ((h << 5) - h) + token.charCodeAt(i);
+            h |= 0;
+        }
+        return Math.abs(h);
+    },
+
+    _pickAutoColorForToken: function(token, palette) {
+        if (!palette || !palette.length) return null;
+        var idx = this._hashToken(token) % palette.length;
+        return this._sanitizeCustomColor(palette[idx]);
+    },
+
+    _getLangSyntaxConfig: function(lang) {
+        var cfg = this._customSyntaxConfig || {};
+        var languages = cfg.languages || {};
+        return languages[lang] || languages['*'] || {};
+    },
+
+    _getCustomTokenColor: function(token, lang, role) {
+        if (!this._customSyntaxConfig || !token) return null;
+        var decoded = this._decodeHtmlToken(token);
+        var norm = decoded.toLowerCase();
+        var langCfg = this._getLangSyntaxConfig(lang);
+        var tokens = langCfg.tokens || {};
+        var globalTokens = this._customSyntaxConfig.tokens || {};
+
+        var exact = tokens[decoded] || tokens[norm] || globalTokens[decoded] || globalTokens[norm];
+        if (role) {
+            exact = exact || tokens[role + ':' + decoded] || tokens[role + ':' + norm] ||
+                globalTokens[role + ':' + decoded] || globalTokens[role + ':' + norm];
+        }
+        var safe = this._sanitizeCustomColor(exact);
+        if (safe) return safe;
+
+        var randomEnabled = !!langCfg.applyRandomToUnmapped || !!this._customSyntaxConfig.applyRandomToUnmapped;
+        if (!randomEnabled) return null;
+
+        var palette = langCfg.palette || this._customSyntaxConfig.palette || [];
+        var cacheKey = lang + '|' + role + '|' + norm;
+        if (this._customSyntaxColorCache[cacheKey]) return this._customSyntaxColorCache[cacheKey];
+        var auto = this._pickAutoColorForToken(norm, palette);
+        if (auto) this._customSyntaxColorCache[cacheKey] = auto;
+        return auto;
+    },
+
+    _loadThemeSyntaxConfig: async function(themeId) {
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.load_module_file) {
+            this._resetCustomSyntaxConfig();
+            return;
+        }
+        try {
+            var res = await window.pywebview.api.load_module_file(themeId, 'syntax-colors.json');
+            if (!res.success || !res.content) {
+                this._resetCustomSyntaxConfig();
+                return;
+            }
+            var parsed = JSON.parse(res.content);
+            if (!parsed || typeof parsed !== 'object') {
+                this._resetCustomSyntaxConfig();
+                return;
+            }
+            this._customSyntaxThemeId = themeId;
+            this._customSyntaxConfig = parsed;
+            this._customSyntaxColorCache = {};
+        } catch(e) {
+            this._resetCustomSyntaxConfig();
+        }
+    },
+
+    applyUIThemeExtension: async function(themeId, options) {
+        try {
+            options = options || {};
+            var persist = options.persist !== false;
+            var notify = options.notify !== false;
+            var logApply = options.log !== false;
+
+            if (this._uiThemesBetaDisabled) {
+                if (notify) this.showNotification('Beta', 'UI Layout está temporalmente fuera de servicio. Usa Tema Normal en Apariencia.', 'warning');
+                return;
+            }
+
+            if (!window.pywebview || !window.pywebview.api) return;
+            var res = await window.pywebview.api.load_ui_theme(themeId);
+            if (res.success && res.css) {
+                this._applyUIThemeVarsFromCSS(res.css);
+                if (persist) {
+                    this._settings.activeUITheme = themeId;
+                    this.persistSettings();
+                }
+                if (notify) this.showNotification('Tema Aplicado', 'Tema de interfaz cambiado', 'success');
+                if (logApply) this.log('✓ Tema de interfaz aplicado: ' + themeId);
+            } else {
+                if (notify) this.showNotification('Error', res.error || 'No se pudo cargar el tema', 'error');
+            }
+        } catch(e) {
+            if (!options || options.log !== false) this.log('Error cargando tema: ' + e.message, true);
+        }
+    },
+
     toggleDevTools: async function() {
         const res = await window.pywebview.api.toggle_devtools();
         if (res.success) this.log(res.message);
     },
 
+    windowControl: async function(action) {
+        try {
+            if (!window.pywebview || !window.pywebview.api) return;
+            if (action === 'minimize' && window.pywebview.api.window_minimize) {
+                await window.pywebview.api.window_minimize();
+                return;
+            }
+            if (action === 'maximize' && window.pywebview.api.window_toggle_maximize) {
+                await window.pywebview.api.window_toggle_maximize();
+                return;
+            }
+            if (action === 'close' && window.pywebview.api.window_close) {
+                await window.pywebview.api.window_close();
+                return;
+            }
+        } catch(e) {
+            this.log('Error en control de ventana: ' + e.message, true);
+        }
+    },
+
+    toggleWindowDragLock: function(forceEnabled) {
+        var enabled = (typeof forceEnabled === 'boolean') ? forceEnabled : !this._windowDragEnabled;
+        this._windowDragEnabled = enabled;
+        document.body.classList.toggle('window-drag-disabled', !enabled);
+
+        var btn = document.getElementById('window-drag-lock');
+        var icon = document.getElementById('window-drag-lock-icon');
+        if (btn) {
+            btn.classList.toggle('is-enabled', enabled);
+            btn.title = enabled ? 'Desactivar movimiento de ventana' : 'Activar movimiento de ventana';
+        }
+        if (icon) icon.setAttribute('data-lucide', enabled ? 'lock-open' : 'lock');
+        this._refreshIcons();
+    },
+
     createProject: async function() {
-        const metadata = {
+        var projType = document.getElementById('p-type').value;
+        var metadata = {
             name: document.getElementById('p-name').value,
             identifier: document.getElementById('p-id').value,
             creator: document.getElementById('p-creator').value,
             version: document.getElementById('p-version').value,
             category: document.getElementById('p-category').value,
             license: document.getElementById('p-license').value,
-            type: document.getElementById('p-type').value,
+            type: projType,
             icon: document.getElementById('p-icon').value,
             description: document.getElementById('p-desc').value
         };
+
+        if (projType === 'Extension') {
+            metadata.ext_category = document.getElementById('p-ext-category').value;
+            metadata.ext_icon = (document.getElementById('p-ext-icon').value || '').trim() || 'puzzle';
+            metadata.ext_color = (document.getElementById('p-ext-color').value || '').trim() || 'linear-gradient(135deg, #667eea, #764ba2)';
+        }
 
         this.log(`Validando e inicializando proyecto: ${metadata.name}...`);
         const res = await window.pywebview.api.create_project(metadata);
@@ -1172,8 +1514,82 @@ const app = {
         document.getElementById('p-type').value = 'GUI';
         document.getElementById('p-icon').value = '';
         document.getElementById('p-desc').value = '';
+        document.getElementById('p-ext-category').value = 'editor';
+        document.getElementById('p-ext-icon').value = '';
+        document.getElementById('p-ext-color').value = '';
         this.log('Formulario limpiado');
         this.selectTemplate('GUI');
+    },
+
+    onExtensionCategoryChange: function(forceDefaults) {
+        var catEl = document.getElementById('p-ext-category');
+        var iconEl = document.getElementById('p-ext-icon');
+        var colorEl = document.getElementById('p-ext-color');
+        var helpEl = document.getElementById('ext-category-help');
+        if (!catEl || !iconEl || !colorEl) return;
+
+        var cat = catEl.value || 'editor';
+        var map = {
+            'editor': { icon: 'code-2', color: 'linear-gradient(135deg, #2563eb, #1d4ed8)' },
+            'theme': { icon: 'palette', color: 'linear-gradient(135deg, #a855f7, #6d28d9)' },
+            'ui-theme': { icon: 'paintbrush', color: 'linear-gradient(135deg, #10b981, #047857)' },
+            'tools': { icon: 'wrench', color: 'linear-gradient(135deg, #f59e0b, #b45309)' },
+            'language': { icon: 'languages', color: 'linear-gradient(135deg, #06b6d4, #0e7490)' },
+            'productivity': { icon: 'zap', color: 'linear-gradient(135deg, #22c55e, #15803d)' },
+            'debug': { icon: 'bug', color: 'linear-gradient(135deg, #ef4444, #b91c1c)' }
+        };
+        var preset = map[cat] || map.editor;
+        var shouldFill = forceDefaults || !iconEl.value.trim() || !colorEl.value.trim();
+        if (shouldFill) {
+            if (!iconEl.value.trim() || forceDefaults) iconEl.value = preset.icon;
+            if (!colorEl.value.trim() || forceDefaults) colorEl.value = preset.color;
+        }
+        if (helpEl) {
+            if (cat === 'theme') {
+                helpEl.innerHTML = 'Tema Normal: recolorea y ajusta estilo visual. Recomendado para trabajar ahora.';
+            } else if (cat === 'ui-theme') {
+                helpEl.innerHTML = 'UI Layout: cambia estructura/forma de interfaz. Estado beta temporalmente desactivado.';
+            } else {
+                helpEl.innerHTML = 'Elige category <code>theme</code> para crear temas normales de color/estilo.';
+            }
+        }
+        this.updateExtensionVisualPreview();
+    },
+
+    applyExtVisualPreset: function(presetName) {
+        var colorEl = document.getElementById('p-ext-color');
+        var iconEl = document.getElementById('p-ext-icon');
+        if (!colorEl || !iconEl) return;
+
+        var presets = {
+            forest: { color: 'linear-gradient(135deg, #14532d, #22c55e)', icon: 'leaf' },
+            ocean: { color: 'linear-gradient(135deg, #0f172a, #0ea5e9)', icon: 'waves' },
+            sunset: { color: 'linear-gradient(135deg, #f97316, #ec4899)', icon: 'sunset' },
+            mono: { color: 'linear-gradient(135deg, #374151, #111827)', icon: 'circle' }
+        };
+        var preset = presets[presetName];
+        if (!preset) return;
+
+        colorEl.value = preset.color;
+        iconEl.value = preset.icon;
+        this.updateExtensionVisualPreview();
+    },
+
+    updateExtensionVisualPreview: function() {
+        var colorEl = document.getElementById('p-ext-color');
+        var iconEl = document.getElementById('p-ext-icon');
+        var swatch = document.getElementById('ext-visual-preview-swatch');
+        var icon = document.getElementById('ext-visual-preview-icon');
+        var iconName = document.getElementById('ext-visual-preview-icon-name');
+        if (!colorEl || !iconEl || !swatch || !icon || !iconName) return;
+
+        var color = (colorEl.value || '').trim() || 'linear-gradient(135deg, #667eea, #764ba2)';
+        var iconVal = (iconEl.value || '').trim() || 'puzzle';
+
+        swatch.style.background = color;
+        icon.setAttribute('data-lucide', iconVal);
+        iconName.textContent = iconVal;
+        this._refreshIcons();
     },
 
     selectTemplate: function(type) {
@@ -1186,24 +1602,37 @@ const app = {
         });
 
         // Show/hide form fields based on template
-        const fgCategory = document.getElementById('fg-category');
-        const fgLicense = document.getElementById('fg-license');
-        const fgIcon = document.getElementById('fg-icon');
-        const fgIdentifier = document.getElementById('fg-identifier');
-        const fsConfig = document.getElementById('fs-config');
+        var fgCategory = document.getElementById('fg-category');
+        var fgLicense = document.getElementById('fg-license');
+        var fgIcon = document.getElementById('fg-icon');
+        var fgIdentifier = document.getElementById('fg-identifier');
+        var fsConfig = document.getElementById('fs-config');
+        var fgExtCategory = document.getElementById('fg-ext-category');
+        var fgExtIcon = document.getElementById('fg-ext-icon');
+        var fgExtColor = document.getElementById('fg-ext-color');
 
         if (type === 'Extension') {
             if (fgCategory) fgCategory.style.display = 'none';
             if (fgLicense) fgLicense.style.display = 'none';
             if (fgIcon) fgIcon.style.display = 'none';
+            if (fgExtCategory) fgExtCategory.style.display = '';
+            if (fgExtIcon) fgExtIcon.style.display = '';
+            if (fgExtColor) fgExtColor.style.display = '';
             if (fsConfig) fsConfig.style.display = '';
             if (fgIdentifier) fgIdentifier.style.display = '';
+            this.onExtensionCategoryChange(true);
         } else if (type === 'Blank') {
             if (fsConfig) fsConfig.style.display = 'none';
+            if (fgExtCategory) fgExtCategory.style.display = 'none';
+            if (fgExtIcon) fgExtIcon.style.display = 'none';
+            if (fgExtColor) fgExtColor.style.display = 'none';
         } else {
             if (fgCategory) fgCategory.style.display = '';
             if (fgLicense) fgLicense.style.display = '';
             if (fgIcon) fgIcon.style.display = '';
+            if (fgExtCategory) fgExtCategory.style.display = 'none';
+            if (fgExtIcon) fgExtIcon.style.display = 'none';
+            if (fgExtColor) fgExtColor.style.display = 'none';
             if (fsConfig) fsConfig.style.display = '';
             if (fgIdentifier) fgIdentifier.style.display = '';
         }
@@ -1707,9 +2136,6 @@ const app = {
     },
 
     updateRecentProjects: function(name, path) {
-        const container = document.getElementById('recent-projects');
-        if (!container) return;
-
         let recents = [];
         try {
             const stored = window.localStorage.getItem('recentProjects');
@@ -1733,38 +2159,8 @@ const app = {
     },
 
     renderRecentProjects: function(recents) {
-        const container = document.getElementById('recent-projects');
         const homeContainer = document.getElementById('home-recent-projects');
 
-        // Sidebar recents
-        if (container) {
-            if (!recents || recents.length === 0) {
-                container.innerHTML = '<p class="empty-state">No hay proyectos recientes</p>';
-            } else {
-                container.innerHTML = '';
-                recents.forEach(p => {
-                    const btn = document.createElement('button');
-                    btn.className = 'nav-item';
-                    btn.style.fontSize = '12px';
-                    btn.style.padding = '8px 16px';
-                    btn.innerHTML = `<i data-lucide="folder" style="width:14px;height:14px"></i><span>${p.name}</span>`;
-                    btn.onclick = () => {
-                        this.currentProjectPath = p.path;
-                        this._syncProjectToBackend(p.path);
-                        this.expandedFolders = {};
-                        this.log(`Proyecto abierto: ${p.name}`);
-                        document.getElementById('breadcrumb-text').textContent = p.name;
-                        this.refreshExplorer();
-                        this.showView('editor');
-                        this.updateTerminalPrompt(p.name);
-                        this.detectProjectType();
-                    };
-                    container.appendChild(btn);
-                });
-            }
-        }
-
-        // Home screen recents
         if (homeContainer) {
             if (!recents || recents.length === 0) {
                 homeContainer.innerHTML = '<p class="empty-state">No hay proyectos recientes</p>';
@@ -2025,9 +2421,27 @@ const app = {
                 DEX.extensionHandlers = {};
                 DEX.uiButtons = [];
                 await this.loadExtensions();
+                await this.loadNormalThemes();
                 this._extensionTestMode = true;
                 this._testExtId = tempId;
                 this.updateRunButton();
+
+                // Auto-apply theme.css for theme/ui-theme extensions
+                var isTheme = (manifest.category === 'theme' || manifest.category === 'ui-theme' || manifest.type === 'ui-theme');
+                if (isTheme) {
+                    try {
+                        if (this._uiThemesBetaDisabled) {
+                            this.log('⚠ UI Layout en beta: aplicación temporalmente desactivada');
+                        } else {
+                            var themeRes = await window.pywebview.api.load_ui_theme(tempId);
+                            if (themeRes.success && themeRes.css) {
+                                this._applyUIThemeVarsFromCSS(themeRes.css);
+                                this.log('🎨 Tema de interfaz aplicado en modo prueba');
+                            }
+                        }
+                    } catch(e) {}
+                }
+
                 this.showNotification('Modo Prueba', 'Extensión "' + (manifest.name || extId) + '" en modo prueba', 'info');
                 this.log('🧪 Extensión en modo prueba — presiona "Terminar Prueba" para finalizar');
             } else {
@@ -2044,12 +2458,25 @@ const app = {
 
         this.log('⏹ Finalizando modo prueba...');
         try {
+            // Remove temporary UI theme vars if they were applied
+            this._clearAppliedUIThemeVars();
+
+            // Restore persisted UI extension theme (if any)
+            if (this._settings.activeUITheme) {
+                await this.applyUIThemeExtension(this._settings.activeUITheme, {
+                    persist: false,
+                    notify: false,
+                    log: false
+                });
+            }
+
             await window.pywebview.api.run_command('rm -rf ~/.dex-studio/extensions/' + tempId + ' 2>&1');
             this._extensionsLoaded = false;
             DEX.extensions = {};
             DEX.extensionHandlers = {};
             DEX.uiButtons = [];
             await this.loadExtensions();
+            await this.loadNormalThemes();
         } catch(e) {}
 
         this._extensionTestMode = false;
@@ -2192,6 +2619,29 @@ const app = {
         }
     },
 
+    toggleTopbarMenu: function() {
+        var dd = document.getElementById('topbar-dropdown');
+        if (!dd) return;
+        var isOpen = dd.style.display !== 'none';
+        dd.style.display = isOpen ? 'none' : 'block';
+        app._refreshIcons();
+        if (!isOpen) {
+            setTimeout(function() {
+                document.addEventListener('click', function handler(e) {
+                    if (!e.target.closest('.topbar-menu-wrap')) {
+                        dd.style.display = 'none';
+                    }
+                    document.removeEventListener('click', handler);
+                }, { once: true });
+            }, 10);
+        }
+    },
+
+    closeTopbarMenu: function() {
+        var dd = document.getElementById('topbar-dropdown');
+        if (dd) dd.style.display = 'none';
+    },
+
     toggleConsole: function() {
         this.consoleOpen = !this.consoleOpen;
         const panel = document.getElementById('bottom-panel');
@@ -2227,10 +2677,24 @@ const app = {
             if (!window.pywebview || !window.pywebview.api) return;
             this._settingsLoaded = true;
             const res = await window.pywebview.api.load_settings();
+            await this.loadNormalThemes();
             if (res.success && res.settings) {
                 this._settings = res.settings;
-                if (res.settings.uiTheme) this.applyUITheme(res.settings.uiTheme);
+                if (res.settings.uiTheme) {
+                    if (String(res.settings.uiTheme).indexOf('ext:') === 0) {
+                        await this.changeUITheme(res.settings.uiTheme, true, false);
+                    } else {
+                        this.applyUITheme(res.settings.uiTheme);
+                    }
+                }
                 if (res.settings.editorTheme) this.applyEditorTheme(res.settings.editorTheme);
+                if (res.settings.activeUITheme) {
+                    await this.applyUIThemeExtension(res.settings.activeUITheme, {
+                        persist: false,
+                        notify: false,
+                        log: false
+                    });
+                }
                 if (res.settings.fontSize) this.changeFontSize(res.settings.fontSize, true);
                 if (res.settings.fontFamily) this.changeFontFamily(res.settings.fontFamily, true);
                 if (res.settings.consoleOpen === false) { this.consoleOpen = true; this.toggleConsole(); }
@@ -2304,10 +2768,37 @@ const app = {
         this.applyEditorTheme(this.editorTheme);
     },
 
-    changeUITheme: function(theme) {
+    changeUITheme: async function(theme, skipPersist, skipNotify) {
+        if (String(theme).indexOf('ext:') === 0) {
+            var themeId = String(theme).slice(4);
+            try {
+                if (window.pywebview && window.pywebview.api && window.pywebview.api.load_normal_theme) {
+                    var res = await window.pywebview.api.load_normal_theme(themeId);
+                    if (res.success && res.css) {
+                        this.applyUITheme('dark');
+                        this._applyNormalThemeVarsFromCSS(res.css);
+                        await this._loadThemeSyntaxConfig(themeId);
+                        this.uiTheme = theme;
+                        this._settings.uiTheme = theme;
+                        if (!skipPersist) this.persistSettings();
+                        if (!skipNotify) this.showNotification('Tema Aplicado', 'Tema normal de extensión aplicado', 'success', 1800);
+                        this.updateHighlight();
+                        return;
+                    }
+                }
+                this.showNotification('Error', 'No se pudo cargar el tema normal de extensión', 'error');
+            } catch(e) {
+                this.log('Error aplicando tema normal: ' + e.message, true);
+            }
+            return;
+        }
+
+        this._clearAppliedNormalThemeVars();
+        this._resetCustomSyntaxConfig();
         this._settings.uiTheme = theme;
-        this.persistSettings();
+        if (!skipPersist) this.persistSettings();
         this.applyUITheme(theme);
+        this.updateHighlight();
     },
 
     applyUITheme: function(theme) {
@@ -2446,8 +2937,8 @@ const app = {
 
     clearRecentProjects: function() {
         try { window.localStorage.removeItem('recentProjects'); } catch(e) {}
-        const container = document.getElementById('recent-projects');
-        if (container) container.innerHTML = '<p class="empty-state">No hay proyectos recientes</p>';
+        const homeContainer = document.getElementById('home-recent-projects');
+        if (homeContainer) homeContainer.innerHTML = '<p class="empty-state">No hay proyectos recientes</p>';
         this.log('Proyectos recientes limpiados');
         this.closeModal('options-modal');
     },
@@ -2953,8 +3444,15 @@ const app = {
         const map = {
             py: 'python', js: 'javascript', json: 'json',
             html: 'html', htm: 'html', css: 'css',
-            md: 'markdown', txt: 'text', sh: 'bash',
-            xml: 'html', svg: 'html'
+            md: 'markdown', markdown: 'markdown', txt: 'text', sh: 'bash',
+            xml: 'html', svg: 'html',
+            ts: 'typescript', tsx: 'typescript',
+            c: 'c', h: 'c',
+            cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+            rs: 'rust', sql: 'sql',
+            yaml: 'yaml', yml: 'yaml', toml: 'toml',
+            java: 'java', go: 'go', php: 'php',
+            rb: 'ruby', lua: 'lua'
         };
         return map[ext] || 'text';
     },
@@ -2973,6 +3471,19 @@ const app = {
         if (lang === 'css') return this._hlCSS(escaped);
         if (lang === 'json') return this._hlJSON(escaped);
         if (lang === 'bash') return this._hlBash(escaped);
+        if (lang === 'typescript') return this._hlTypeScript(escaped);
+        if (lang === 'c') return this._hlC(escaped);
+        if (lang === 'cpp') return this._hlCpp(escaped);
+        if (lang === 'rust') return this._hlRust(escaped);
+        if (lang === 'sql') return this._hlSQL(escaped);
+        if (lang === 'markdown') return this._hlMarkdown(escaped);
+        if (lang === 'yaml') return this._hlYAML(escaped);
+        if (lang === 'toml') return this._hlTOML(escaped);
+        if (lang === 'java') return this._hlJava(escaped);
+        if (lang === 'go') return this._hlGo(escaped);
+        if (lang === 'php') return this._hlPHP(escaped);
+        if (lang === 'ruby') return this._hlRuby(escaped);
+        if (lang === 'lua') return this._hlLua(escaped);
         return escaped;
     },
 
@@ -3051,13 +3562,32 @@ const app = {
 
     _hlJSON: function(code) {
         // Strings (keys)
-        code = code.replace(/(&quot;[^&]*?&quot;)(\s*:)/g, '<span class="hl-attr">$1</span>$2');
+        var self = this;
+        code = code.replace(/(&quot;[^&]*?&quot;)(\s*:)/g, function(_, keyStr, colon) {
+            var rawKey = keyStr.substring(6, keyStr.length - 6);
+            var keyColor = self._getCustomTokenColor(rawKey, 'json', 'key');
+            if (keyColor) return '<span class="hl-attr" style="color:' + keyColor + '">' + keyStr + '</span>' + colon;
+            return '<span class="hl-attr">' + keyStr + '</span>' + colon;
+        });
         // Strings (values)
-        code = code.replace(/(:\s*)(&quot;[^&]*?&quot;)/g, '$1<span class="hl-string">$2</span>');
+        code = code.replace(/(:\s*)(&quot;[^&]*?&quot;)/g, function(_, prefix, valStr) {
+            var rawVal = valStr.substring(6, valStr.length - 6);
+            var valColor = self._getCustomTokenColor(rawVal, 'json', 'value');
+            if (valColor) return prefix + '<span class="hl-string" style="color:' + valColor + '">' + valStr + '</span>';
+            return prefix + '<span class="hl-string">' + valStr + '</span>';
+        });
         // Numbers
-        code = code.replace(/:\s*(\d+\.?\d*)/g, ': <span class="hl-number">$1</span>');
+        code = code.replace(/:\s*(-?\d+\.?\d*)/g, function(_, numVal) {
+            var numColor = self._getCustomTokenColor(numVal, 'json', 'number');
+            if (numColor) return ': <span class="hl-number" style="color:' + numColor + '">' + numVal + '</span>';
+            return ': <span class="hl-number">' + numVal + '</span>';
+        });
         // Booleans / null
-        code = code.replace(/:\s*(true|false|null)\b/g, ': <span class="hl-constant">$1</span>');
+        code = code.replace(/:\s*(true|false|null)\b/g, function(_, lit) {
+            var litColor = self._getCustomTokenColor(lit, 'json', 'constant');
+            if (litColor) return ': <span class="hl-constant" style="color:' + litColor + '">' + lit + '</span>';
+            return ': <span class="hl-constant">' + lit + '</span>';
+        });
         return code;
     },
 
@@ -3070,6 +3600,275 @@ const app = {
         code = code.replace(/\b(if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|exit|export|source|local|echo|cd|ls|mkdir|rm|cp|mv|cat|grep|sed|awk|chmod|chown|sudo|apt|pip|python3|python|node|npm)\b/g, '<span class="hl-keyword">$1</span>');
         // Variables
         code = code.replace(/(\$\w+|\$\{[^}]+\})/g, '<span class="hl-builtin">$1</span>');
+        return code;
+    },
+
+    _hlTypeScript: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Template literals
+        code = code.replace(/(`[^`]*`)/g, '<span class="hl-string">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Decorators
+        code = code.replace(/(@\w+)/g, '<span class="hl-decorator">$1</span>');
+        // TypeScript keywords
+        code = code.replace(/\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|this|class|extends|import|export|from|default|try|catch|finally|throw|async|await|yield|typeof|instanceof|of|in|delete|void|type|interface|enum|namespace|declare|abstract|implements|readonly|keyof|infer|as|is|asserts|override|satisfies)\b/g, '<span class="hl-keyword">$1</span>');
+        // Builtins
+        code = code.replace(/\b(console|document|window|Math|JSON|Array|Object|String|Number|Boolean|Promise|Map|Set|RegExp|Error|Date|parseInt|parseFloat|setTimeout|setInterval|fetch|require|module|exports)\b/g, '<span class="hl-builtin">$1</span>');
+        // Constants
+        code = code.replace(/\b(null|undefined|true|false|NaN|Infinity)\b/g, '<span class="hl-constant">$1</span>');
+        // Generics
+        code = code.replace(/(&lt;\w+&gt;)/g, '<span class="hl-builtin">$1</span>');
+        // Numbers
+        code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+        // Operators
+        code = code.replace(/(===|!==|==|!=|&lt;=|&gt;=|=&gt;|\+\+|--)/g, '<span class="hl-operator">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlC: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Preprocessor directives
+        code = code.replace(/^(\s*#\s*(?:include|define|ifdef|ifndef|endif|if|else|elif|undef|pragma|error|warning).*)/gm, '<span class="hl-decorator">$1</span>');
+        // Keywords
+        code = code.replace(/\b(int|char|float|double|void|long|short|unsigned|signed|struct|union|enum|typedef|const|static|extern|register|volatile|auto|sizeof|return|if|else|for|while|do|switch|case|break|continue|default|goto)\b/g, '<span class="hl-keyword">$1</span>');
+        // Standard types
+        code = code.replace(/\b(size_t|ptrdiff_t|intptr_t|uintptr_t|int8_t|int16_t|int32_t|int64_t|uint8_t|uint16_t|uint32_t|uint64_t|bool|FILE|NULL)\b/g, '<span class="hl-builtin">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F]+|\d+\.?\d*[fFlLuU]*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlCpp: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Preprocessor directives
+        code = code.replace(/^(\s*#\s*(?:include|define|ifdef|ifndef|endif|if|else|elif|undef|pragma|error|warning).*)/gm, '<span class="hl-decorator">$1</span>');
+        // Keywords
+        code = code.replace(/\b(int|char|float|double|void|long|short|unsigned|signed|struct|union|enum|typedef|const|static|extern|register|volatile|sizeof|return|if|else|for|while|do|switch|case|break|continue|default|goto|class|public|private|protected|virtual|override|final|new|delete|try|catch|throw|template|typename|namespace|using|nullptr|constexpr|noexcept|auto|decltype|static_assert|thread_local|alignas|alignof|concept|requires|co_await|co_yield|co_return|inline|explicit|friend|operator|mutable)\b/g, '<span class="hl-keyword">$1</span>');
+        // Standard library
+        code = code.replace(/\b(std|cout|cin|endl|cerr|vector|string|map|set|unique_ptr|shared_ptr|make_unique|make_shared|pair|array|deque|list|queue|stack|unordered_map|unordered_set)\b/g, '<span class="hl-builtin">$1</span>');
+        // Constants
+        code = code.replace(/\b(true|false|nullptr|NULL)\b/g, '<span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F]+|\d+\.?\d*[fFlLuU]*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlRust: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Raw strings
+        code = code.replace(/(r#*&quot;[\s\S]*?&quot;#*)/g, '<span class="hl-string">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;))/g, '<span class="hl-string">$1</span>');
+        // Lifetime annotations
+        code = code.replace(/(&#39;\w+)/g, '<span class="hl-decorator">$1</span>');
+        // Keywords
+        code = code.replace(/\b(fn|let|mut|const|static|struct|enum|impl|trait|pub|mod|use|crate|self|super|where|match|if|else|for|while|loop|break|continue|return|as|in|ref|move|async|await|unsafe|extern|type|dyn|box)\b/g, '<span class="hl-keyword">$1</span>');
+        // Types
+        code = code.replace(/\b(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|char|str|String|Vec|Option|Result|Box|Rc|Arc|HashMap|HashSet|Self)\b/g, '<span class="hl-builtin">$1</span>');
+        // Constants
+        code = code.replace(/\b(None|Some|Ok|Err|true|false)\b/g, '<span class="hl-constant">$1</span>');
+        // Macros
+        code = code.replace(/(\w+!)/g, '<span class="hl-decorator">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|\d[\d_]*\.?\d*(?:f32|f64|u8|u16|u32|u64|u128|i8|i16|i32|i64|i128|usize|isize)?)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlSQL: function(code) {
+        // Comments
+        code = code.replace(/(--.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/(&#39;(?:[^&]|&(?!#39;))*?&#39;)/g, '<span class="hl-string">$1</span>');
+        // Keywords (case-insensitive)
+        code = code.replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|DROP|INDEX|VIEW|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|ON|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|UNION|ALL|AS|DISTINCT|COUNT|SUM|AVG|MIN|MAX|CASE|WHEN|THEN|ELSE|END|VALUES|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|CHECK|UNIQUE|CASCADE|TRIGGER|PROCEDURE|FUNCTION|BEGIN|COMMIT|ROLLBACK|TRANSACTION|GRANT|REVOKE|select|from|where|insert|into|update|set|delete|create|table|alter|drop|index|view|join|left|right|inner|outer|cross|on|and|or|not|in|exists|between|like|is|null|order|by|group|having|limit|offset|union|all|as|distinct|count|sum|avg|min|max|case|when|then|else|end|values|primary|key|foreign|references|constraint|default|check|unique|cascade|trigger|procedure|function|begin|commit|rollback|transaction|grant|revoke)\b/gi, '<span class="hl-keyword">$1</span>');
+        // Types (case-insensitive)
+        code = code.replace(/\b(INT|INTEGER|VARCHAR|TEXT|BOOLEAN|DATE|TIMESTAMP|FLOAT|DECIMAL|BLOB|SERIAL|BIGINT|SMALLINT|int|integer|varchar|text|boolean|date|timestamp|float|decimal|blob|serial|bigint|smallint)\b/gi, '<span class="hl-builtin">$1</span>');
+        // Numbers
+        code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+        return code;
+    },
+
+    _hlMarkdown: function(code) {
+        // Code blocks (fenced)
+        code = code.replace(/^(```[\s\S]*?```)/gm, '<span class="hl-string">$1</span>');
+        // Inline code
+        code = code.replace(/(`[^`\n]+`)/g, '<span class="hl-string">$1</span>');
+        // Headers
+        code = code.replace(/^(#{1,6}\s+.*)/gm, '<span class="hl-keyword">$1</span>');
+        // Bold
+        code = code.replace(/(\*\*[^*]+\*\*|__[^_]+__)/g, '<span class="hl-constant">$1</span>');
+        // Italic
+        code = code.replace(/(\*[^*\n]+\*|_[^_\n]+_)/g, '<span class="hl-builtin">$1</span>');
+        // Links
+        code = code.replace(/(\[[^\]]*\]\([^)]*\))/g, '<span class="hl-tag">$1</span>');
+        // Blockquotes
+        code = code.replace(/^(&gt;.*)/gm, '<span class="hl-comment">$1</span>');
+        // Horizontal rules
+        code = code.replace(/^(---+|\*\*\*+|___+)\s*$/gm, '<span class="hl-operator">$1</span>');
+        // Unordered lists
+        code = code.replace(/^(\s*[-*+]\s)/gm, '<span class="hl-decorator">$1</span>');
+        // Ordered lists
+        code = code.replace(/^(\s*\d+\.\s)/gm, '<span class="hl-decorator">$1</span>');
+        return code;
+    },
+
+    _hlYAML: function(code) {
+        // Comments
+        code = code.replace(/(#.*)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Keys
+        code = code.replace(/^(\s*[\w.-]+)(\s*:)/gm, '<span class="hl-attr">$1</span>$2');
+        // Booleans
+        code = code.replace(/:\s*(true|false|yes|no|on|off)\s*$/gm, ': <span class="hl-constant">$1</span>');
+        // Null
+        code = code.replace(/:\s*(null|~)\s*$/gm, ': <span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/:\s*(\d+\.?\d*)\s*$/gm, ': <span class="hl-number">$1</span>');
+        return code;
+    },
+
+    _hlTOML: function(code) {
+        // Comments
+        code = code.replace(/(#.*)/g, '<span class="hl-comment">$1</span>');
+        // Section headers
+        code = code.replace(/^(\[\[?[^\]]*\]\]?)/gm, '<span class="hl-keyword">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Keys
+        code = code.replace(/^(\s*[\w.-]+)(\s*=)/gm, '<span class="hl-attr">$1</span>$2');
+        // Booleans
+        code = code.replace(/=\s*(true|false)/g, '= <span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/=\s*(\d+\.?\d*)/g, '= <span class="hl-number">$1</span>');
+        // Dates
+        code = code.replace(/=\s*(\d{4}-\d{2}-\d{2}(?:T[\d:]+(?:Z|[+-]\d{2}:\d{2})?)?)/g, '= <span class="hl-number">$1</span>');
+        return code;
+    },
+
+    _hlJava: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Annotations
+        code = code.replace(/(@\w+)/g, '<span class="hl-decorator">$1</span>');
+        // Keywords
+        code = code.replace(/\b(public|private|protected|class|interface|extends|implements|abstract|final|static|void|new|return|if|else|for|while|do|switch|case|break|continue|default|try|catch|finally|throw|throws|import|package|this|super|synchronized|volatile|transient|native|instanceof|enum|assert|var|record|sealed|permits|yield)\b/g, '<span class="hl-keyword">$1</span>');
+        // Types
+        code = code.replace(/\b(int|long|short|byte|float|double|char|boolean|String)\b/g, '<span class="hl-builtin">$1</span>');
+        // Constants
+        code = code.replace(/\b(null|true|false)\b/g, '<span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F]+|\d+\.?\d*[fFdDlL]*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlGo: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        // Raw strings
+        code = code.replace(/(`[^`]*`)/g, '<span class="hl-string">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;))/g, '<span class="hl-string">$1</span>');
+        // Keywords
+        code = code.replace(/\b(func|package|import|var|const|type|struct|interface|map|chan|go|defer|select|case|default|if|else|for|range|switch|break|continue|return|fallthrough|goto)\b/g, '<span class="hl-keyword">$1</span>');
+        // Types
+        code = code.replace(/\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|string|bool|byte|rune|error|any|uintptr)\b/g, '<span class="hl-builtin">$1</span>');
+        // Builtins
+        code = code.replace(/\b(make|len|cap|append|copy|delete|new|close|panic|recover|print|println)\b/g, '<span class="hl-builtin">$1</span>');
+        // Constants
+        code = code.replace(/\b(nil|true|false|iota)\b/g, '<span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F]+|\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlPHP: function(code) {
+        // Comments
+        code = code.replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+        code = code.replace(/(#.*)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Variables
+        code = code.replace(/(\$\w+)/g, '<span class="hl-builtin">$1</span>');
+        // Keywords
+        code = code.replace(/\b(function|class|public|private|protected|static|abstract|interface|extends|implements|new|return|if|else|elseif|for|foreach|while|do|switch|case|break|continue|default|try|catch|finally|throw|use|namespace|require|include|echo|print|die|exit|isset|unset|empty|array|list|match|enum|readonly|fn)\b/g, '<span class="hl-keyword">$1</span>');
+        // Constants
+        code = code.replace(/\b(null|true|false|NULL|TRUE|FALSE)\b/g, '<span class="hl-constant">$1</span>');
+        // Numbers
+        code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlRuby: function(code) {
+        // Comments
+        code = code.replace(/(#.*)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Symbols
+        code = code.replace(/(:\w+)/g, '<span class="hl-constant">$1</span>');
+        // Keywords
+        code = code.replace(/\b(def|class|module|end|if|elsif|else|unless|for|while|until|do|begin|rescue|ensure|raise|return|yield|block_given\?|self|super|require|include|extend|attr_reader|attr_writer|attr_accessor|puts|print|p|lambda|proc|nil|true|false|and|or|not|in|case|when|then)\b/g, '<span class="hl-keyword">$1</span>');
+        // Instance variables
+        code = code.replace(/(@@?\w+)/g, '<span class="hl-builtin">$1</span>');
+        // Global variables
+        code = code.replace(/(\$\w+)/g, '<span class="hl-builtin">$1</span>');
+        // Numbers
+        code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
+        return code;
+    },
+
+    _hlLua: function(code) {
+        // Block comments
+        code = code.replace(/(--\[\[[\s\S]*?\]\])/g, '<span class="hl-comment">$1</span>');
+        // Line comments
+        code = code.replace(/(--.*)/g, '<span class="hl-comment">$1</span>');
+        // Strings
+        code = code.replace(/((?<![\\])(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#39;(?:[^&]|&(?!#39;))*?&#39;))/g, '<span class="hl-string">$1</span>');
+        // Long strings
+        code = code.replace(/(\[\[[\s\S]*?\]\])/g, '<span class="hl-string">$1</span>');
+        // Keywords
+        code = code.replace(/\b(and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b/g, '<span class="hl-keyword">$1</span>');
+        // Builtins
+        code = code.replace(/\b(print|type|tostring|tonumber|pairs|ipairs|next|select|unpack|require|pcall|xpcall|error|assert|table|string|math|io|os|coroutine|setmetatable|getmetatable|rawget|rawset)\b/g, '<span class="hl-builtin">$1</span>');
+        // Numbers
+        code = code.replace(/\b(0[xX][0-9a-fA-F]+|\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="hl-number">$1</span>');
+        // Function calls
+        code = code.replace(/(\w+)(\()/g, '<span class="hl-function">$1</span>$2');
         return code;
     },
 
@@ -3165,6 +3964,7 @@ const app = {
         commands.push({ id: 'git-push', label: 'Git: Subir a GitHub', fn: function() { app.pushToGithub(); } });
         commands.push({ id: 'diff', label: 'Git: Ver Diff', fn: function() { app.showDiff(); } });
         commands.push({ id: 'lite-mode', label: 'Toggle Modo Rendimiento', fn: function() { app.toggleLiteMode(); } });
+        commands.push({ id: 'sdk-ref', label: 'SDK Reference', key: 'Ctrl+Shift+D', fn: function() { app.showView('sdk-reference'); } });
         for (var id in DEX._commands) {
             commands.push({ id: 'ext-' + id, label: id.replace(/[-_]/g, ' '), fn: DEX._commands[id] });
         }

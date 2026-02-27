@@ -18,67 +18,56 @@
     <div id="splash-status">Iniciando...</div>
 </div>
 
+<!-- ── Custom Window Bar (Mac Style) ───────────────────────── -->
+<div id="window-bar" class="window-bar">
+    <div class="window-drag-region" ondblclick="app.windowControl('maximize')">
+        <div class="window-controls">
+            <button class="window-btn window-btn-close" title="Cerrar" onclick="app.windowControl('close')"></button>
+            <button class="window-btn window-btn-min" title="Minimizar" onclick="app.windowControl('minimize')"></button>
+            <button class="window-btn window-btn-max" title="Maximizar / Restaurar" onclick="app.windowControl('maximize')"></button>
+        </div>
+        <div class="window-title">
+            <img src="assets/logo.png" alt="DEX" class="window-title-logo">
+            <span>DEX STUDIO</span>
+        </div>
+        <div class="window-tools">
+            <button id="window-drag-lock" class="window-tool-btn is-enabled" title="Desactivar movimiento de ventana" onclick="app.toggleWindowDragLock()">
+                <i id="window-drag-lock-icon" data-lucide="lock-open"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
 <div class="app-container">
 
-    <!-- ── Sidebar ──────────────────────────────────────────── -->
-    <aside class="sidebar">
-
-        <div class="sidebar-header">
-            <img src="assets/logo.png" alt="DEX STUDIO" class="sidebar-logo">
-            <div>
-                <h1 class="app-title">DEX STUDIO</h1>
-                <p class="app-version">v1.0.2</p>
-            </div>
-        </div>
-
-        <nav class="sidebar-nav">
-
-            <div class="nav-section nav-section-icons">
-                <button class="nav-item active" onclick="app.showView('home')" data-view="home" title="Inicio">
-                    <i data-lucide="home"></i>
-                </button>
-                <button class="nav-item" onclick="app.showView('new')" data-view="new" title="Nuevo Proyecto">
-                    <i data-lucide="file-plus"></i>
-                </button>
-                <button class="nav-item" onclick="app.openProject()" data-view="open" title="Abrir Proyecto">
-                    <i data-lucide="folder-open"></i>
-                </button>
-            </div>
-
-            <div class="nav-section nav-section-icons">
-                <button class="nav-item" onclick="app.showView('editor')" data-view="editor" title="Editor">
-                    <i data-lucide="code-2"></i>
-                </button>
-                <button class="nav-item" onclick="app.showView('settings')" data-view="settings" title="Configuración">
-                    <i data-lucide="sliders-horizontal"></i>
-                </button>
-                <button class="nav-item" onclick="app.showView('extensions')" data-view="extensions" title="Extensiones">
-                    <i data-lucide="puzzle"></i>
-                </button>
-            </div>
-
-            <div class="nav-section">
-                <p class="nav-section-title">Recientes</p>
-                <div id="recent-projects" class="recent-list">
-                    <p class="empty-state">No hay proyectos recientes</p>
-                </div>
-            </div>
-
-        </nav>
-
-        <div class="sidebar-footer">
-            <button class="footer-btn" title="Git & Herramientas" onclick="app.showGitMenu()">
-                <i data-lucide="git-branch"></i>
+    <!-- ── Activity Bar (VS Code style) ─────────────────────── -->
+    <div class="activity-bar">
+        <div class="activity-bar-top">
+            <button class="activity-icon active" onclick="app.showView('home')" data-view="home" title="Inicio">
+                <i data-lucide="home"></i>
             </button>
-            <button class="footer-btn" title="Ayuda" onclick="app.showHelp()">
-                <i data-lucide="circle-help"></i>
+            <button class="activity-icon" onclick="app.showView('editor')" data-view="editor" title="Explorador">
+                <i data-lucide="files"></i>
             </button>
-            <button class="footer-btn" title="Más opciones" onclick="app.showMoreOptions()">
-                <i data-lucide="ellipsis"></i>
+            <button class="activity-icon" onclick="app.showView('new')" data-view="new" title="Nuevo Proyecto">
+                <i data-lucide="file-plus-2"></i>
+            </button>
+            <button class="activity-icon" onclick="app.openProject()" title="Abrir Proyecto">
+                <i data-lucide="folder-open"></i>
+            </button>
+            <button class="activity-icon" onclick="app.showView('extensions')" data-view="extensions" title="Extensiones">
+                <i data-lucide="puzzle"></i>
+            </button>
+            <button class="activity-icon" onclick="app.showView('sdk-reference')" data-view="sdk-reference" title="SDK Reference">
+                <i data-lucide="book-open"></i>
             </button>
         </div>
-
-    </aside>
+        <div class="activity-bar-bottom">
+            <button class="activity-icon" onclick="app.showView('settings')" data-view="settings" title="Configuración">
+                <i data-lucide="settings"></i>
+            </button>
+        </div>
+    </div>
 
     <!-- ── Main Content ──────────────────────────────────────── -->
     <div class="main-content">
@@ -110,10 +99,38 @@
                     </button>
                 </div>
 
-                <div class="theme-selector">
-                    <button class="theme-btn" onclick="app.toggleThemeMenu()" title="Cambiar tema">
-                        <i data-lucide="sun-moon"></i>
+                <div class="topbar-menu-wrap">
+                    <button class="action-btn" onclick="app.toggleTopbarMenu()" title="Menú">
+                        <i data-lucide="menu"></i>
                     </button>
+                    <div id="topbar-dropdown" class="topbar-dropdown" style="display:none">
+                        <div class="topbar-dd-title">Centro de Control</div>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();app.showGitMenu()">
+                            <i data-lucide="git-branch"></i>
+                            <span class="topbar-dd-text"><strong>Git y Herramientas</strong><small>Estado del repo y acciones rápidas</small></span>
+                        </button>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();app.toggleThemeMenu()">
+                            <i data-lucide="sun-moon"></i>
+                            <span class="topbar-dd-text"><strong>Cambiar Tema</strong><small>Alternar entre temas integrados</small></span>
+                        </button>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();app.showHelp()">
+                            <i data-lucide="circle-help"></i>
+                            <span class="topbar-dd-text"><strong>Ayuda</strong><small>Guía rápida y referencia</small></span>
+                        </button>
+                        <div class="topbar-dd-sep"></div>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();location.reload()">
+                            <i data-lucide="refresh-cw"></i>
+                            <span class="topbar-dd-text"><strong>Recargar Interfaz</strong><small>Refresca la UI sin cerrar la app</small></span>
+                        </button>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();app.exportProjectInfo()">
+                            <i data-lucide="file-text"></i>
+                            <span class="topbar-dd-text"><strong>Info del Proyecto</strong><small>Exporta metadata del proyecto actual</small></span>
+                        </button>
+                        <button class="topbar-dd-item" onclick="app.closeTopbarMenu();app.toggleDevTools()">
+                            <i data-lucide="bug"></i>
+                            <span class="topbar-dd-text"><strong>Dev Tools</strong><small>Inspección y diagnóstico</small></span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -189,7 +206,7 @@
                         </div>
                     </div>
 
-                    <p class="home-footer-text">DEX STUDIO v1.0.2 — Creador de Aplicaciones para Linux</p>
+                    <p class="home-footer-text">DEX STUDIO v1.0.3 — Creador de Aplicaciones para Linux</p>
                 </div>
             </section>
 
@@ -290,6 +307,41 @@
                                         <option value="Science">Ciencia</option>
                                         <option value="System">Sistema</option>
                                     </select>
+                                </div>
+                                <div class="form-group" id="fg-ext-category" style="display:none">
+                                    <label for="p-ext-category">Tipo de Extensión</label>
+                                    <select id="p-ext-category" class="form-input" onchange="app.onExtensionCategoryChange()">
+                                        <option value="editor">📝 Editor</option>
+                                        <option value="theme">🎨 Tema Normal (Colores/estilo)</option>
+                                        <option value="tools">🔧 Herramientas</option>
+                                        <option value="language">💬 Lenguaje</option>
+                                        <option value="productivity">⚡ Productividad</option>
+                                        <option value="ui-theme">🖌️ UI Layout (Estructura - Beta)</option>
+                                        <option value="debug">🐛 Depuración</option>
+                                    </select>
+                                    <small id="ext-category-help" class="ext-ui-builder-help">Tema Normal: recolorea la app y estilos visuales. UI Layout: cambia estructura/forma y está en beta.</small>
+                                </div>
+                                <div class="form-group" id="fg-ext-icon" style="display:none">
+                                    <label for="p-ext-icon">Ícono Lucide</label>
+                                    <input type="text" id="p-ext-icon" placeholder="puzzle, palette, zap, code..." class="form-input" oninput="app.updateExtensionVisualPreview()">
+                                    <small style="color:var(--text-secondary);font-size:11px">Ver catálogo en <a href="https://lucide.dev/icons" style="color:var(--accent)" onclick="event.preventDefault();window.pywebview&&window.pywebview.api.open_url?window.pywebview.api.open_url('https://lucide.dev/icons'):0">lucide.dev/icons</a></small>
+                                </div>
+                                <div class="form-group" id="fg-ext-color" style="display:none">
+                                    <label for="p-ext-color">Color del Marketplace</label>
+                                    <input type="text" id="p-ext-color" placeholder="linear-gradient(135deg, #667eea, #764ba2)" class="form-input" oninput="app.updateExtensionVisualPreview()">
+                                    <div class="ext-visual-presets">
+                                        <button type="button" class="ext-preset-btn" onclick="app.applyExtVisualPreset('forest')">Forest</button>
+                                        <button type="button" class="ext-preset-btn" onclick="app.applyExtVisualPreset('ocean')">Ocean</button>
+                                        <button type="button" class="ext-preset-btn" onclick="app.applyExtVisualPreset('sunset')">Sunset</button>
+                                        <button type="button" class="ext-preset-btn" onclick="app.applyExtVisualPreset('mono')">Mono</button>
+                                    </div>
+                                    <div id="ext-visual-preview" class="ext-visual-preview">
+                                        <div id="ext-visual-preview-swatch" class="ext-visual-swatch"></div>
+                                        <div class="ext-visual-meta">
+                                            <strong>Preview Marketplace</strong>
+                                            <span><i data-lucide="puzzle" id="ext-visual-preview-icon"></i> <span id="ext-visual-preview-icon-name">puzzle</span></span>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="form-group" id="fg-license">
                                     <label for="p-license">Licencia</label>
@@ -400,33 +452,63 @@
                 </div>
             </section>
 
-            <!-- ── View: Configuración ───────────────────────── -->
+            <!-- ── View: Configuración (VS Code Style) ───────── -->
             <section id="view-settings" class="view-section">
-                <div class="view-container">
-                    <div class="view-header">
-                        <h2>Configuración</h2>
-                        <p>Personaliza DEX STUDIO según tus preferencias</p>
+                <div class="settings-v2">
+                    <!-- Settings Sidebar -->
+                    <div class="settings-v2-sidebar">
+                        <div class="settings-v2-sidebar-header">
+                            <i data-lucide="sliders-horizontal"></i>
+                            <span>Configuración</span>
+                        </div>
+                        <button class="settings-v2-nav active" data-settings-cat="appearance" onclick="app.switchSettingsCat('appearance')">
+                            <i data-lucide="palette"></i> Apariencia
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="editor" onclick="app.switchSettingsCat('editor')">
+                            <i data-lucide="type"></i> Editor
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="terminal" onclick="app.switchSettingsCat('terminal')">
+                            <i data-lucide="terminal"></i> Terminal
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="themes" onclick="app.switchSettingsCat('themes')">
+                            <i data-lucide="paintbrush"></i> Temas UI
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="performance" onclick="app.switchSettingsCat('performance')">
+                            <i data-lucide="zap"></i> Rendimiento
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="keybindings" onclick="app.switchSettingsCat('keybindings')">
+                            <i data-lucide="keyboard"></i> Atajos
+                        </button>
+                        <button class="settings-v2-nav" data-settings-cat="about" onclick="app.switchSettingsCat('about')">
+                            <i data-lucide="info"></i> Acerca de
+                        </button>
                     </div>
 
-                    <div class="settings-grid">
+                    <!-- Settings Content -->
+                    <div class="settings-v2-content">
+                        <!-- Appearance -->
+                        <div class="settings-v2-panel active" id="settings-panel-appearance">
+                            <h2 class="settings-v2-title">Apariencia</h2>
+                            <p class="settings-v2-desc">Personaliza la apariencia visual de DEX STUDIO</p>
 
-                        <div class="settings-card">
-                            <div class="settings-card-header">
-                                <i data-lucide="palette"></i>
-                                <h3>Apariencia</h3>
-                            </div>
-                            <div class="settings-content">
-                                <div class="setting-item">
-                                    <label>Tema de Interfaz</label>
-                                    <select id="ui-theme" onchange="app.changeUITheme(this.value)" class="form-input">
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Tema Normal</strong>
+                                        <span>Temas predeterminados de color/estilo para toda la app</span>
+                                    </div>
+                                    <select id="ui-theme" onchange="app.changeUITheme(this.value)" class="form-input" style="width:160px">
                                         <option value="dark">Dark</option>
                                         <option value="light">Light</option>
                                         <option value="cyberpunk">Cyberpunk</option>
                                     </select>
                                 </div>
-                                <div class="setting-item">
-                                    <label>Tema del Editor</label>
-                                    <select id="editor-theme" onchange="app.changeEditorTheme(this.value)" class="form-input">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Tema del Editor</strong>
+                                        <span>Colores del resaltado de sintaxis</span>
+                                    </div>
+                                    <select id="editor-theme" onchange="app.changeEditorTheme(this.value)" class="form-input" style="width:160px">
                                         <option value="dark">Oscuro</option>
                                         <option value="light">Claro</option>
                                         <option value="dracula">Dracula</option>
@@ -436,84 +518,177 @@
                             </div>
                         </div>
 
-                        <div class="settings-card">
-                            <div class="settings-card-header">
-                                <i data-lucide="type"></i>
-                                <h3>Editor</h3>
-                            </div>
-                            <div class="settings-content">
-                                <div class="setting-item">
-                                    <label>Tamaño de Fuente</label>
-                                    <select id="font-size" onchange="app.changeFontSize(this.value)" class="form-input">
+                        <!-- Editor -->
+                        <div class="settings-v2-panel" id="settings-panel-editor">
+                            <h2 class="settings-v2-title">Editor</h2>
+                            <p class="settings-v2-desc">Configuración del editor de código</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Tamaño de Fuente</strong>
+                                        <span>Tamaño del texto en el editor</span>
+                                    </div>
+                                    <select id="font-size" onchange="app.changeFontSize(this.value)" class="form-input" style="width:120px">
                                         <option value="11">11px</option>
                                         <option value="12">12px</option>
                                         <option value="13" selected>13px</option>
                                         <option value="14">14px</option>
                                         <option value="15">15px</option>
                                         <option value="16">16px</option>
+                                        <option value="18">18px</option>
+                                        <option value="20">20px</option>
                                     </select>
                                 </div>
-                                <div class="setting-item">
-                                    <label>Familia de Fuente</label>
-                                    <select id="font-family" onchange="app.changeFontFamily(this.value)" class="form-input">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Familia de Fuente</strong>
+                                        <span>Tipografía del editor de código</span>
+                                    </div>
+                                    <select id="font-family" onchange="app.changeFontFamily(this.value)" class="form-input" style="width:180px">
                                         <option value="'Fira Code', monospace">Fira Code</option>
                                         <option value="'Courier New', monospace">Courier New</option>
                                         <option value="'Monaco', monospace">Monaco</option>
-                                        <option value="monospace">Monospace</option>
+                                        <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                                        <option value="monospace">Monospace (Sistema)</option>
                                     </select>
+                                </div>
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Tab Size</strong>
+                                        <span>Espacios por tabulación</span>
+                                    </div>
+                                    <select id="tab-size" onchange="app.changeTabSize(this.value)" class="form-input" style="width:100px">
+                                        <option value="2">2 espacios</option>
+                                        <option value="4" selected>4 espacios</option>
+                                        <option value="8">8 espacios</option>
+                                    </select>
+                                </div>
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Word Wrap</strong>
+                                        <span>Ajuste de línea automático</span>
+                                    </div>
+                                    <input type="checkbox" id="word-wrap-toggle" onchange="app.toggleWordWrap()" checked>
+                                </div>
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Minimap</strong>
+                                        <span>Mostrar minimapa lateral</span>
+                                    </div>
+                                    <input type="checkbox" id="minimap-toggle" onchange="app.toggleMinimap()" checked>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="settings-card">
-                            <div class="settings-card-header">
-                                <i data-lucide="terminal"></i>
-                                <h3>Terminal</h3>
-                            </div>
-                            <div class="settings-content">
-                                <div class="setting-item">
-                                    <label>Historial máximo</label>
-                                    <select id="cmd-history-limit"
-                                        onchange="app.cmdHistoryLimit=parseInt(this.value)"
-                                        class="form-input">
+                        <!-- Terminal -->
+                        <div class="settings-v2-panel" id="settings-panel-terminal">
+                            <h2 class="settings-v2-title">Terminal</h2>
+                            <p class="settings-v2-desc">Configuración de la terminal integrada</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Historial máximo</strong>
+                                        <span>Cantidad de comandos a recordar</span>
+                                    </div>
+                                    <select id="cmd-history-limit" onchange="app.cmdHistoryLimit=parseInt(this.value)" class="form-input" style="width:140px">
                                         <option value="25">25 comandos</option>
                                         <option value="50" selected>50 comandos</option>
                                         <option value="100">100 comandos</option>
+                                        <option value="200">200 comandos</option>
                                     </select>
+                                </div>
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Terminal visible al inicio</strong>
+                                        <span>Mostrar la terminal al abrir DEX Studio</span>
+                                    </div>
+                                    <input type="checkbox" id="terminal-visible-toggle" checked>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="settings-card">
-                            <div class="settings-card-header">
-                                <i data-lucide="zap"></i>
-                                <h3>Rendimiento</h3>
-                            </div>
-                            <div class="settings-content">
-                                <div class="setting-item" style="display:flex;justify-content:space-between;align-items:center">
+                        <!-- UI Themes -->
+                        <div class="settings-v2-panel" id="settings-panel-themes">
+                            <h2 class="settings-v2-title">UI Layout (Beta)</h2>
+                            <p class="settings-v2-desc">Esta sección es solo para extensiones de estructura/layout de interfaz (no para temas normales).</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-warning-box">
+                                    <i data-lucide="cone"></i>
                                     <div>
-                                        <label>Modo Rendimiento (Lite)</label>
-                                        <p class="setting-description">Desactiva animaciones, blur y transparencias</p>
+                                        <strong>Fuera de servicio temporal (Beta)</strong>
+                                        <p>El botón <code>Aplicar</code> está desactivado mientras se estabiliza UI Layout. Para colores/estilo usa <strong>Tema Normal</strong> en Apariencia.</p>
+                                    </div>
+                                </div>
+                                <div class="settings-v2-info-box">
+                                    <i data-lucide="paintbrush"></i>
+                                    <div>
+                                        <strong>Nota de categorías</strong>
+                                        <p><code>theme</code> = tema normal (colores). <code>ui-theme</code> = layout/estructura (beta). Estamos enfocando desarrollo en <code>theme</code>.</p>
+                                    </div>
+                                </div>
+                                <div id="ui-themes-list" class="settings-v2-themes-list">
+                                    <p class="empty-state">No hay temas de interfaz instalados. Descarga uno desde el Marketplace o crea el tuyo.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance -->
+                        <div class="settings-v2-panel" id="settings-panel-performance">
+                            <h2 class="settings-v2-title">Rendimiento</h2>
+                            <p class="settings-v2-desc">Optimiza DEX Studio para tu hardware</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-row">
+                                    <div class="settings-v2-label">
+                                        <strong>Modo Rendimiento (Lite)</strong>
+                                        <span>Desactiva animaciones, blur, transparencias y syntax highlighting para máxima velocidad</span>
                                     </div>
                                     <input type="checkbox" id="lite-mode-toggle" onchange="app.toggleLiteMode()">
                                 </div>
                             </div>
                         </div>
 
-                        <div class="settings-card">
-                            <div class="settings-card-header">
-                                <i data-lucide="info"></i>
-                                <h3>Acerca de</h3>
-                            </div>
-                            <div class="settings-content">
-                                <p class="version-text">DEX STUDIO v1.0.0</p>
-                                <p class="setting-description">Creador de Aplicaciones para Linux</p>
-                                <p class="setting-description" style="margin-top:6px;font-size:11px">
-                                    Motor: PyWebView + Python 3
-                                </p>
+                        <!-- Keybindings -->
+                        <div class="settings-v2-panel" id="settings-panel-keybindings">
+                            <h2 class="settings-v2-title">Atajos de Teclado</h2>
+                            <p class="settings-v2-desc">Referencia rápida de atajos disponibles</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-keybind"><kbd>Ctrl+S</kbd><span>Guardar archivo</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+N</kbd><span>Nuevo archivo</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+W</kbd><span>Cerrar pestaña activa</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+B</kbd><span>Toggle terminal</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+`</kbd><span>Focus en terminal</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+F</kbd><span>Buscar en archivo</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+H</kbd><span>Buscar y Reemplazar</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+D</kbd><span>Seleccionar siguiente ocurrencia</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+Shift+P</kbd><span>Paleta de Comandos</span></div>
+                                <div class="settings-v2-keybind"><kbd>Ctrl+Shift+D</kbd><span>SDK Reference</span></div>
+                                <div class="settings-v2-keybind"><kbd>Tab</kbd><span>Insertar tabulación / Expandir snippet</span></div>
+                                <div class="settings-v2-keybind"><kbd>Esc</kbd><span>Cerrar modal / panel</span></div>
                             </div>
                         </div>
 
+                        <!-- About -->
+                        <div class="settings-v2-panel" id="settings-panel-about">
+                            <h2 class="settings-v2-title">Acerca de DEX STUDIO</h2>
+                            <p class="settings-v2-desc">Información del editor</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-about-card">
+                                    <img src="assets/logo.png" alt="DEX STUDIO" style="width:48px;height:48px;border-radius:12px;object-fit:contain">
+                                    <div>
+                                        <h3>DEX STUDIO v1.0.3</h3>
+                                        <p>Creador de Aplicaciones para Linux</p>
+                                        <p style="font-size:11px;color:var(--text-tertiary);margin-top:6px">Motor: PyWebView + Python 3 | Frontend: HTML/CSS/JS</p>
+                                        <p style="font-size:11px;color:var(--text-tertiary)">Lenguajes soportados: Python, JavaScript, TypeScript, HTML, CSS, JSON, Bash, C, C++, Rust, SQL, Markdown, YAML, TOML, Java, Go, PHP, Ruby, Lua</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -557,6 +732,228 @@
                                 <i data-lucide="globe" style="width:32px;height:32px;color:var(--text-tertiary)"></i>
                                 <p>Haz click en <strong>Marketplace</strong> para cargar extensiones de la comunidad</p>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── View: SDK Reference ───────────────────────── -->
+            <section id="view-sdk-reference" class="view-section">
+                <div class="sdk-ref-container">
+                    <div class="sdk-ref-sidebar">
+                        <div class="sdk-ref-header">
+                            <i data-lucide="book-open"></i>
+                            <span>SDK Reference</span>
+                        </div>
+                        <button class="sdk-ref-nav active" data-sdk-cat="overview" onclick="app.switchSdkCat('overview')">Visión General</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="filesystem" onclick="app.switchSdkCat('filesystem')">📁 File System</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="editor" onclick="app.switchSdkCat('editor')">✏️ Editor</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="ui" onclick="app.switchSdkCat('ui')">🎨 UI</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="dialog" onclick="app.switchSdkCat('dialog')">💬 Dialog</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="events" onclick="app.switchSdkCat('events')">⚡ Events</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="shell" onclick="app.switchSdkCat('shell')">🖥️ Shell</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="storage" onclick="app.switchSdkCat('storage')">💾 Storage</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="http" onclick="app.switchSdkCat('http')">🌐 HTTP</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="project" onclick="app.switchSdkCat('project')">📦 Project</button>
+                        <button class="sdk-ref-nav" data-sdk-cat="themes" onclick="app.switchSdkCat('themes')">🎭 Themes</button>
+                    </div>
+                    <div class="sdk-ref-content" id="sdk-ref-content">
+                        <div class="sdk-ref-panel active" id="sdk-panel-overview">
+                            <h2>DEX STUDIO SDK</h2>
+                            <p>El SDK de DEX STUDIO te permite crear extensiones potentes que interactúan con el editor, el sistema de archivos y la interfaz.</p>
+                            <h3>Inicio Rápido</h3>
+                            <pre class="sdk-code">DEX.registerExtension({
+    id: 'mi-extension',
+    name: 'Mi Extensión',
+    version: '1.0.0',
+    description: 'Descripción'
+}, {
+    onInit: function() {
+        DEX.log('Extensión cargada!');
+    }
+});
+// Dex code successful</pre>
+                            <h3>Estructura del Manifest</h3>
+                            <pre class="sdk-code">{
+    "id": "mi-extension",
+    "name": "Mi Extensión",
+    "version": "1.0.0",
+    "description": "...",
+    "author": "Tu Nombre",
+    "category": "editor|theme|ui|language",
+    "icon": "nombre-lucide-icon",
+    "color": "linear-gradient(135deg, #a, #b)"
+}</pre>
+                            <h3>Tipos de Extensión</h3>
+                            <div class="sdk-type-grid">
+                                <div class="sdk-type-card"><strong>editor</strong><p>Modifica el comportamiento del editor, añade botones, autocompletado</p></div>
+                                <div class="sdk-type-card"><strong>theme</strong><p>Define temas de interfaz con CSS personalizado</p></div>
+                                <div class="sdk-type-card"><strong>ui</strong><p>Crea paneles, sidebars y elementos de interfaz</p></div>
+                                <div class="sdk-type-card"><strong>language</strong><p>Añade soporte para nuevos lenguajes</p></div>
+                            </div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-filesystem">
+                            <h2>📁 File System API</h2>
+                            <p>Acceso al sistema de archivos del proyecto.</p>
+                            <div class="sdk-method"><h4>DEX.fs.readFile(path)</h4><p>Lee el contenido de un archivo. Retorna <code>{success, content}</code></p><pre class="sdk-code">const res = await DEX.fs.readFile('/ruta/archivo.txt');
+if (res.success) console.log(res.content);</pre></div>
+                            <div class="sdk-method"><h4>DEX.fs.writeFile(path, content)</h4><p>Escribe contenido en un archivo. Retorna <code>{success}</code></p><pre class="sdk-code">await DEX.fs.writeFile('/ruta/archivo.txt', 'contenido');</pre></div>
+                            <div class="sdk-method"><h4>DEX.fs.listDir(path)</h4><p>Lista archivos de un directorio. Retorna <code>{success, items[]}</code></p><pre class="sdk-code">const res = await DEX.fs.listDir(DEX.getProjectPath());
+res.items.forEach(item => console.log(item.name, item.is_dir));</pre></div>
+                            <div class="sdk-method"><h4>DEX.fs.createFile(path)</h4><p>Crea un archivo vacío.</p></div>
+                            <div class="sdk-method"><h4>DEX.fs.createDir(path)</h4><p>Crea un directorio (y subdirectorios necesarios).</p></div>
+                            <div class="sdk-method"><h4>DEX.fs.delete(path)</h4><p>Elimina un archivo o directorio.</p></div>
+                            <div class="sdk-method"><h4>DEX.fs.rename(oldPath, newPath)</h4><p>Renombra un archivo o directorio.</p></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-editor">
+                            <h2>✏️ Editor API</h2>
+                            <p>Control del editor de código.</p>
+                            <div class="sdk-method"><h4>DEX.editor.getContent()</h4><p>Retorna el contenido actual del editor como string.</p></div>
+                            <div class="sdk-method"><h4>DEX.editor.setContent(text)</h4><p>Reemplaza el contenido del editor.</p></div>
+                            <div class="sdk-method"><h4>DEX.editor.getSelection()</h4><p>Retorna el texto seleccionado.</p></div>
+                            <div class="sdk-method"><h4>DEX.editor.replaceSelection(text)</h4><p>Reemplaza la selección actual con el texto dado.</p></div>
+                            <div class="sdk-method"><h4>DEX.editor.insertAtCursor(text)</h4><p>Inserta texto en la posición del cursor.</p></div>
+                            <div class="sdk-method"><h4>DEX.editor.getCursor()</h4><p>Retorna <code>{line, col}</code> de la posición actual.</p></div>
+                            <div class="sdk-method"><h4>DEX.readCurrentFile()</h4><p>Retorna el contenido del archivo actual (o null).</p></div>
+                            <div class="sdk-method"><h4>DEX.getCurrentFilePath()</h4><p>Retorna la ruta completa del archivo activo.</p></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-ui">
+                            <h2>🎨 UI API</h2>
+                            <p>Crea elementos de interfaz personalizados.</p>
+                            <div class="sdk-method"><h4>DEX.ui.showToast(message, type, duration)</h4><p>Muestra una notificación. Tipos: 'success', 'error', 'info', 'warning'</p><pre class="sdk-code">DEX.ui.showToast('Archivo procesado!', 'success', 3000);</pre></div>
+                            <div class="sdk-method"><h4>DEX.ui.createStatusBarItem(id, text)</h4><p>Crea un elemento en la barra de estado del editor.</p><pre class="sdk-code">DEX.ui.createStatusBarItem('word-count', 'Palabras: 0');</pre></div>
+                            <div class="sdk-method"><h4>DEX.ui.updateStatusBarItem(id, text)</h4><p>Actualiza el texto de un elemento de la barra de estado.</p></div>
+                            <div class="sdk-method"><h4>DEX.ui.removeStatusBarItem(id)</h4><p>Elimina un elemento de la barra de estado.</p></div>
+                            <div class="sdk-method"><h4>DEX.ui.addContextMenuItem(label, icon, callback)</h4><p>Añade un item al menú contextual del explorador.</p></div>
+                            <div class="sdk-method"><h4>DEX.createPanel(id, html, options)</h4><p>Crea un panel personalizado. Opciones: {position: 'right', width: '350px'}</p><pre class="sdk-code">DEX.createPanel('mi-panel', '&lt;h3&gt;Panel&lt;/h3&gt;&lt;p&gt;Contenido&lt;/p&gt;', {position: 'right'});</pre></div>
+                            <div class="sdk-method"><h4>DEX.removePanel(id)</h4><p>Elimina un panel personalizado.</p></div>
+                            <div class="sdk-method"><h4>DEX.showSidebar(id, html)</h4><p>Muestra un sidebar a la derecha del editor.</p></div>
+                            <div class="sdk-method"><h4>ui_buttons (manifest)</h4><p>Define botones en el toolbar del editor que aparecen con ciertos tipos de archivo.</p><pre class="sdk-code">// En el manifest.json:
+"ui_buttons": [{
+    "label": "Preview",
+    "icon": "eye",
+    "action": "preview",
+    "fileTypes": [".html", ".md"]
+}]</pre></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-dialog">
+                            <h2>💬 Dialog API</h2>
+                            <p>Diálogos de interacción con el usuario.</p>
+                            <div class="sdk-method"><h4>DEX.dialog.alert(message, title)</h4><p>Muestra un aviso (notificación). Retorna Promise.</p></div>
+                            <div class="sdk-method"><h4>DEX.dialog.confirm(message, title)</h4><p>Pide confirmación. Retorna Promise&lt;boolean&gt;</p></div>
+                            <div class="sdk-method"><h4>DEX.dialog.prompt(title, placeholder, defaultValue)</h4><p>Pide texto al usuario. Retorna Promise&lt;string|null&gt;</p><pre class="sdk-code">const nombre = await DEX.dialog.prompt('Nombre', 'Escribe tu nombre', 'User');
+if (nombre) DEX.log('Hola ' + nombre);</pre></div>
+                            <div class="sdk-method"><h4>DEX.dialog.select(title, options[])</h4><p>Muestra un selector de opciones. Retorna Promise&lt;string|null&gt;</p><pre class="sdk-code">const lang = await DEX.dialog.select('Idioma', ['Español', 'English', 'Français']);</pre></div>
+                            <div class="sdk-method"><h4>DEX.showInputDialog(opts)</h4><p>Dialog personalizado con input. Opciones: {title, message, placeholder, defaultValue, type, okLabel}</p></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-events">
+                            <h2>⚡ Events API</h2>
+                            <p>Escucha y emite eventos del editor.</p>
+                            <div class="sdk-method"><h4>DEX.events.on(event, callback)</h4><p>Suscríbete a un evento.</p></div>
+                            <div class="sdk-method"><h4>DEX.events.off(event, callback)</h4><p>Desuscríbete de un evento.</p></div>
+                            <div class="sdk-method"><h4>DEX.events.emit(event, data)</h4><p>Emite un evento personalizado.</p></div>
+                            <h3 style="margin-top:20px">Eventos Disponibles</h3>
+                            <table class="sdk-table">
+                                <tr><th>Evento</th><th>Datos</th><th>Descripción</th></tr>
+                                <tr><td><code>fileOpen</code></td><td><code>string</code> (ruta)</td><td>Se dispara cuando se abre un archivo</td></tr>
+                                <tr><td><code>fileSave</code></td><td><code>string</code> (ruta)</td><td>Se dispara al guardar un archivo</td></tr>
+                                <tr><td><code>fileClose</code></td><td><code>string</code> (ruta)</td><td>Se dispara al cerrar una pestaña</td></tr>
+                                <tr><td><code>projectOpen</code></td><td><code>{name, path}</code></td><td>Se dispara al abrir un proyecto</td></tr>
+                            </table>
+                            <h3 style="margin-top:20px">Callbacks en Handlers</h3>
+                            <pre class="sdk-code">DEX.registerExtension(config, {
+    onInit: function() { /* Al cargar la extensión */ },
+    onFileOpen: function(path, ext) { /* Al abrir archivo, return true para manejar */ },
+    onFileSave: function(path) { /* Al guardar */ },
+    onFileClose: function(path) { /* Al cerrar pestaña */ },
+    onProjectOpen: function(info) { /* Al abrir proyecto */ },
+    onEditorInput: function(editor) { /* En cada tecla en el editor */ }
+});</pre>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-shell">
+                            <h2>🖥️ Shell API</h2>
+                            <p>Ejecutar comandos del sistema.</p>
+                            <div class="sdk-method"><h4>DEX.shell.exec(command)</h4><p>Ejecuta un comando shell. Retorna <code>{success, stdout, stderr, code}</code></p><pre class="sdk-code">const res = await DEX.shell.exec('ls -la');
+if (res.success) DEX.log(res.stdout);</pre></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-storage">
+                            <h2>💾 Storage API</h2>
+                            <p>Almacenamiento persistente por extensión.</p>
+                            <div class="sdk-method"><h4>DEX.storage.forExtension(extId)</h4><p>Retorna un objeto de storage específico para la extensión.</p><pre class="sdk-code">const store = DEX.storage.forExtension('mi-extension');
+await store.set('config', JSON.stringify({key: 'value'}));
+const data = await store.get('config');</pre></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-http">
+                            <h2>🌐 HTTP API</h2>
+                            <p>Hacer peticiones HTTP.</p>
+                            <div class="sdk-method"><h4>DEX.http.fetch(url, options)</h4><p>Petición HTTP via curl. Opciones: {method, headers, body}</p><pre class="sdk-code">const res = await DEX.http.fetch('https://api.ejemplo.com/data', {
+    method: 'GET',
+    headers: {'Accept': 'application/json'}
+});
+if (res.success) console.log(JSON.parse(res.data));</pre></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-project">
+                            <h2>📦 Project API</h2>
+                            <p>Información del proyecto actual.</p>
+                            <div class="sdk-method"><h4>DEX.project.getPath()</h4><p>Ruta del proyecto abierto.</p></div>
+                            <div class="sdk-method"><h4>DEX.project.getName()</h4><p>Nombre del proyecto.</p></div>
+                            <div class="sdk-method"><h4>DEX.project.getOpenFiles()</h4><p>Lista de archivos abiertos (pestañas).</p></div>
+                            <div class="sdk-method"><h4>DEX.project.getCurrentFile()</h4><p>Ruta del archivo activo.</p></div>
+                            <div class="sdk-method"><h4>DEX.project.getLanguage()</h4><p>Lenguaje detectado del archivo actual.</p></div>
+                            <div class="sdk-method"><h4>DEX.project.isExtension()</h4><p>True si el proyecto es una extensión de DEX.</p></div>
+                            <div class="sdk-method"><h4>DEX.project.getFiles(path?)</h4><p>Lista archivos del proyecto o una subruta.</p></div>
+                        </div>
+                        <div class="sdk-ref-panel" id="sdk-panel-themes">
+                            <h2>🎭 Creando Temas de Interfaz</h2>
+                            <p>Los temas de interfaz permiten cambiar completamente la apariencia de DEX STUDIO.</p>
+                            <h3>1. Estructura del tema</h3>
+                            <pre class="sdk-code">mi-tema/
+├── manifest.json    # category: "theme"
+├── theme.css        # Variables CSS personalizadas
+├── main.js          # Registro de la extensión
+└── README.md        # Documentación</pre>
+                            <h3>2. manifest.json</h3>
+                            <pre class="sdk-code">{
+    "id": "mi-tema-oscuro",
+    "name": "Mi Tema Oscuro",
+    "version": "1.0.0",
+    "category": "theme",
+    "type": "ui-theme",
+    "colors": {
+        "bg-base": "#0d1117",
+        "accent": "#58a6ff"
+    }
+}</pre>
+                            <h3>3. theme.css — Variables disponibles</h3>
+                            <pre class="sdk-code">:root {
+    --bg-base: #0d1117;
+    --bg-surface: #161b22;
+    --bg-elevated: #21262d;
+    --bg-overlay: #30363d;
+    --text-primary: rgba(255, 255, 255, 0.92);
+    --text-secondary: rgba(255, 255, 255, 0.55);
+    --text-tertiary: rgba(255, 255, 255, 0.28);
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --accent-subtle: rgba(88, 166, 255, 0.12);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f85149;
+}</pre>
+                            <h3>4. main.js</h3>
+                            <pre class="sdk-code">DEX.registerExtension({
+    id: 'mi-tema-oscuro',
+    name: 'Mi Tema Oscuro',
+    version: '1.0.0',
+    category: 'theme'
+}, {
+    onInit: function() {
+        DEX.log('Tema disponible: Mi Tema Oscuro');
+    }
+});
+// Dex code successful</pre>
                         </div>
                     </div>
                 </div>
@@ -670,7 +1067,7 @@
             <div class="help-section">
                 <h3>Acerca de</h3>
                 <p style="font-size:13px;color:var(--text-secondary)">
-                    DEX STUDIO v1.0.2 — Motor PyWebView + Python
+                    DEX STUDIO v1.0.3 — Motor PyWebView + Python
                 </p>
             </div>
 
