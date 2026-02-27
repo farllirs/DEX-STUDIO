@@ -5,6 +5,7 @@ const DEX = {
     loadedWordlists: {},
     currentLanguage: 'text',
     uiButtons: [],
+    coreButtonOverrides: {},
 
     registerExtension: function(config, handlers) {
         this.extensions[config.id] = config;
@@ -109,6 +110,30 @@ const DEX = {
         });
 
         app._refreshIcons();
+    },
+
+    // Override native/core editor buttons from extensions (e.g. terminal button)
+    overrideCoreButton: function(buttonId, override) {
+        if (!buttonId || !override || typeof override !== 'object') return false;
+        this.coreButtonOverrides[buttonId] = override;
+        if (typeof app !== 'undefined' && app.applyCoreButtonOverrides) app.applyCoreButtonOverrides();
+        return true;
+    },
+
+    clearCoreButtonOverride: function(buttonId) {
+        if (!buttonId) return false;
+        delete this.coreButtonOverrides[buttonId];
+        if (typeof app !== 'undefined' && app.applyCoreButtonOverrides) app.applyCoreButtonOverrides();
+        return true;
+    },
+
+    getCoreButtonCatalog: function() {
+        return [
+            { id: 'run', selector: '#run-btn', iconSelector: '#run-btn-icon', labelSelector: '#run-btn-text', description: 'Boton principal de ejecutar/probar extension' },
+            { id: 'compile', selector: '#core-btn-compile', iconSelector: '#core-btn-compile-icon', labelSelector: '#core-btn-compile-label', description: 'Boton principal de compilacion' },
+            { id: 'terminal', selector: '#core-btn-terminal', iconSelector: '#core-btn-terminal-icon', labelSelector: '#console-label', description: 'Boton principal de terminal en topbar' },
+            { id: 'console-toggle', selector: '#console-toggle', iconSelector: '#console-toggle-icon', labelSelector: '', description: 'Boton de colapsar/expandir terminal integrada' }
+        ];
     },
 
     // Trigger onFileOpen hooks — returns true if an extension handled it
@@ -609,6 +634,13 @@ const DEX = {
     }
 };
 
+// Dedicated UI API for extensions, separate from theme/ui-theme mechanisms.
+DEX.ui = {
+    overrideButton: function(id, config) { return DEX.overrideCoreButton(id, config); },
+    clearButton: function(id) { return DEX.clearCoreButtonOverride(id); },
+    listButtons: function() { return DEX.getCoreButtonCatalog(); }
+};
+
 const app = {
     currentProjectPath: null,
     currentFilePath: null,
@@ -622,6 +654,8 @@ const app = {
     lastLogMessage: '',
     cmdHistory: [],
     cmdHistoryIndex: -1,
+    cmdHistoryLimit: 50,
+    _tabSize: 4,
     _previewOpen: false,
     _iconsTimer: null,
     selectedTemplate: 'GUI',
@@ -636,6 +670,7 @@ const app = {
     _customSyntaxConfig: null,
     _customSyntaxColorCache: {},
     _uiThemesBetaDisabled: true,
+    _coreButtonDefaults: {},
 
     _settings: {},
 
@@ -658,6 +693,7 @@ const app = {
         this.toggleWindowDragLock(true);
         this.log("DEX STUDIO v1.0.3 — Creador de Apps para Linux");
         document.getElementById('breadcrumb-text').textContent = 'Inicio';
+        this.applyCoreButtonOverrides();
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -747,6 +783,22 @@ const app = {
                             termInput.value = '';
                         }
                     }
+                });
+            }
+
+            const terminalVisibleToggle = document.getElementById('terminal-visible-toggle');
+            if (terminalVisibleToggle) {
+                terminalVisibleToggle.addEventListener('change', (e) => {
+                    this.setConsoleOpen(!!e.target.checked);
+                });
+            }
+
+            const cmdHistorySel = document.getElementById('cmd-history-limit');
+            if (cmdHistorySel) {
+                cmdHistorySel.addEventListener('change', (e) => {
+                    this.cmdHistoryLimit = parseInt(e.target.value, 10) || 50;
+                    this._settings.cmdHistoryLimit = this.cmdHistoryLimit;
+                    this.persistSettings();
                 });
             }
         }, 100);
@@ -875,11 +927,63 @@ const app = {
                 }
             }
 
+            this.applyCoreButtonOverrides();
             // Update extensions view
             this.updateExtensionsView();
         } catch(e) {
             // Extensions loading is optional, don't crash
         }
+    },
+
+    applyCoreButtonOverrides: function() {
+        var specs = [
+            { id: 'run', btn: 'run-btn', icon: 'run-btn-icon', label: 'run-btn-text', defaultAction: null },
+            { id: 'compile', btn: 'core-btn-compile', icon: 'core-btn-compile-icon', label: 'core-btn-compile-label', defaultAction: function() { app.compileProject(); } },
+            { id: 'terminal', btn: 'core-btn-terminal', icon: 'core-btn-terminal-icon', label: 'console-label', defaultAction: function() { app.toggleConsole(); } },
+            { id: 'console-toggle', btn: 'console-toggle', icon: 'console-toggle-icon', label: null, defaultAction: function() { app.toggleConsole(); } }
+        ];
+
+        specs.forEach(function(spec) {
+            var btnEl = document.getElementById(spec.btn);
+            var iconEl = spec.icon ? document.getElementById(spec.icon) : null;
+            var labelEl = spec.label ? document.getElementById(spec.label) : null;
+            if (!btnEl) return;
+            var currentAction = btnEl.onclick;
+
+            if (!app._coreButtonDefaults[spec.id]) {
+                app._coreButtonDefaults[spec.id] = {
+                    label: labelEl ? (labelEl.textContent || '') : '',
+                    icon: iconEl ? (iconEl.getAttribute('data-lucide') || '') : '',
+                    title: btnEl.getAttribute('title') || '',
+                    action: (currentAction && !currentAction.__dexCoreWrapper) ? currentAction : spec.defaultAction
+                };
+            }
+
+            var defaults = app._coreButtonDefaults[spec.id];
+            var ov = DEX.coreButtonOverrides[spec.id] || null;
+
+            // The run button changes mode dynamically (run/test/stop test). Keep defaults in sync.
+            if (spec.id === 'run') {
+                if (currentAction && !currentAction.__dexCoreWrapper) {
+                    defaults.action = currentAction;
+                }
+                if (labelEl) defaults.label = labelEl.textContent || defaults.label;
+                if (iconEl) defaults.icon = iconEl.getAttribute('data-lucide') || defaults.icon;
+            }
+
+            if (labelEl) labelEl.textContent = (ov && ov.label) ? ov.label : defaults.label;
+            if (iconEl) iconEl.setAttribute('data-lucide', (ov && ov.icon) ? ov.icon : defaults.icon);
+            btnEl.setAttribute('title', (ov && ov.title) ? ov.title : defaults.title);
+            btnEl.style.display = (ov && ov.hidden) ? 'none' : '';
+            btnEl.disabled = !!(ov && ov.disabled);
+            var wrapped = function(e) {
+                if (ov && typeof ov.action === 'function') return ov.action(e);
+                return defaults.action(e);
+            };
+            wrapped.__dexCoreWrapper = true;
+            btnEl.onclick = wrapped;
+        });
+        this._refreshIcons();
     },
 
     updateExtensionsView: async function() {
@@ -1066,7 +1170,7 @@ const app = {
 
     execTerminalCommand: async function(cmd) {
         this.cmdHistory.unshift(cmd);
-        if (this.cmdHistory.length > 50) this.cmdHistory.pop();
+        if (this.cmdHistory.length > (this.cmdHistoryLimit || 50)) this.cmdHistory.pop();
         this.cmdHistoryIndex = -1;
 
         const out = document.getElementById('terminal-out');
@@ -1148,6 +1252,7 @@ const app = {
         if (panel) panel.classList.add('active');
         if (cat === 'appearance') this.loadNormalThemes();
         if (cat === 'themes') this.loadUIThemes();
+        if (cat === 'developer') this.renderDeveloperUICatalog();
         app._refreshIcons();
     },
 
@@ -2113,6 +2218,7 @@ const app = {
             btn.style.color = '';
             btn.onclick = function() { app.runProject(); };
         }
+        this.applyCoreButtonOverrides();
         this._refreshIcons();
     },
 
@@ -2277,6 +2383,7 @@ const app = {
                     DEX.extensions = {};
                     DEX.extensionHandlers = {};
                     DEX.uiButtons = [];
+                    DEX.coreButtonOverrides = {};
                     await this.loadExtensions();
                     this.showNotification('Extensión Recargada', manifest.name || extId, 'success');
                 } else {
@@ -2420,6 +2527,7 @@ const app = {
                 DEX.extensions = {};
                 DEX.extensionHandlers = {};
                 DEX.uiButtons = [];
+                DEX.coreButtonOverrides = {};
                 await this.loadExtensions();
                 await this.loadNormalThemes();
                 this._extensionTestMode = true;
@@ -2475,6 +2583,7 @@ const app = {
             DEX.extensions = {};
             DEX.extensionHandlers = {};
             DEX.uiButtons = [];
+            DEX.coreButtonOverrides = {};
             await this.loadExtensions();
             await this.loadNormalThemes();
         } catch(e) {}
@@ -2642,19 +2751,59 @@ const app = {
         if (dd) dd.style.display = 'none';
     },
 
-    toggleConsole: function() {
-        this.consoleOpen = !this.consoleOpen;
+    setConsoleOpen: function(isOpen, skipPersist) {
+        this.consoleOpen = !!isOpen;
         const panel = document.getElementById('bottom-panel');
         const toggle = document.getElementById('console-toggle');
+        const toggleIcon = document.getElementById('console-toggle-icon');
+        const visibleToggle = document.getElementById('terminal-visible-toggle');
         
+        if (!panel) return;
+
         if (this.consoleOpen) {
             panel.classList.remove('console-hidden');
-            if (toggle) toggle.setAttribute('data-lucide', 'chevron-down');
+            if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-down');
         } else {
             panel.classList.add('console-hidden');
-            if (toggle) toggle.setAttribute('data-lucide', 'chevron-up');
+            if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-up');
+        }
+        if (visibleToggle) visibleToggle.checked = this.consoleOpen;
+        if (!skipPersist) {
+            this._settings.consoleOpen = this.consoleOpen;
+            this.persistSettings();
         }
         app._refreshIcons();
+    },
+
+    toggleConsole: function(forceOpen, skipPersist) {
+        var next = (typeof forceOpen === 'boolean') ? forceOpen : !this.consoleOpen;
+        this.setConsoleOpen(next, skipPersist);
+    },
+
+    renderDeveloperUICatalog: function() {
+        var el = document.getElementById('developer-ui-catalog');
+        if (!el) return;
+        var catalog = {
+            generatedAt: new Date().toISOString(),
+            coreButtons: DEX.ui.listButtons(),
+            notes: [
+                'Override: DEX.ui.overrideButton("terminal", { label, icon, title, action, hidden, disabled })',
+                'Clear: DEX.ui.clearButton("terminal")'
+            ]
+        };
+        el.textContent = JSON.stringify(catalog, null, 2);
+    },
+
+    copyDeveloperUICatalog: function() {
+        var el = document.getElementById('developer-ui-catalog');
+        if (!el) return;
+        var txt = el.textContent || '';
+        if (!txt) return;
+        navigator.clipboard.writeText(txt).then(() => {
+            this.showNotification('Developer', 'Catálogo copiado', 'success', 1800);
+        }).catch(() => {
+            this.showNotification('Developer', 'No se pudo copiar el catálogo', 'error', 2200);
+        });
     },
 
     toggleThemeMenu: function() {
@@ -2697,7 +2846,25 @@ const app = {
                 }
                 if (res.settings.fontSize) this.changeFontSize(res.settings.fontSize, true);
                 if (res.settings.fontFamily) this.changeFontFamily(res.settings.fontFamily, true);
-                if (res.settings.consoleOpen === false) { this.consoleOpen = true; this.toggleConsole(); }
+                if (typeof res.settings.tabSize === 'number') this._tabSize = res.settings.tabSize;
+                if (typeof res.settings.cmdHistoryLimit === 'number') this.cmdHistoryLimit = res.settings.cmdHistoryLimit;
+                if (typeof res.settings.wordWrap === 'boolean') {
+                    const editor = document.getElementById('code-editor');
+                    const highlight = document.getElementById('code-highlight');
+                    [editor, highlight].forEach(function(el) {
+                        if (el) {
+                            el.style.whiteSpace = res.settings.wordWrap ? 'pre-wrap' : 'pre';
+                            el.style.wordWrap = res.settings.wordWrap ? 'break-word' : 'normal';
+                        }
+                    });
+                }
+                if (typeof res.settings.minimapVisible === 'boolean') {
+                    var minimap = document.getElementById('minimap-container');
+                    if (minimap) minimap.style.display = res.settings.minimapVisible ? '' : 'none';
+                }
+                if (typeof res.settings.consoleOpen === 'boolean') {
+                    this.setConsoleOpen(res.settings.consoleOpen, true);
+                }
                 if (res.settings.recentProjects) {
                     this.renderRecentProjects(res.settings.recentProjects);
                     try { window.localStorage.setItem('recentProjects', JSON.stringify(res.settings.recentProjects)); } catch(e) {}
@@ -2707,10 +2874,20 @@ const app = {
                 const edSel = document.getElementById('editor-theme');
                 const fsSel = document.getElementById('font-size');
                 const ffSel = document.getElementById('font-family');
+                const tabSel = document.getElementById('tab-size');
+                const cmdHistSel = document.getElementById('cmd-history-limit');
+                const wordWrapToggle = document.getElementById('word-wrap-toggle');
+                const minimapToggle = document.getElementById('minimap-toggle');
+                const terminalVisibleToggle = document.getElementById('terminal-visible-toggle');
                 if (uiSel && res.settings.uiTheme) uiSel.value = res.settings.uiTheme;
                 if (edSel && res.settings.editorTheme) edSel.value = res.settings.editorTheme;
                 if (fsSel && res.settings.fontSize) fsSel.value = res.settings.fontSize;
                 if (ffSel && res.settings.fontFamily) ffSel.value = res.settings.fontFamily;
+                if (tabSel && typeof this._tabSize === 'number') tabSel.value = String(this._tabSize);
+                if (cmdHistSel && typeof this.cmdHistoryLimit === 'number') cmdHistSel.value = String(this.cmdHistoryLimit);
+                if (wordWrapToggle && typeof res.settings.wordWrap === 'boolean') wordWrapToggle.checked = res.settings.wordWrap;
+                if (minimapToggle && typeof res.settings.minimapVisible === 'boolean') minimapToggle.checked = res.settings.minimapVisible;
+                if (terminalVisibleToggle && typeof this.consoleOpen === 'boolean') terminalVisibleToggle.checked = this.consoleOpen;
 
                 if (res.settings.liteMode) {
                     document.body.classList.add('lite-mode');
@@ -2727,7 +2904,7 @@ const app = {
                     try {
                         var tokenRes = await window.pywebview.api.load_github_token();
                         if (tokenRes.success && tokenRes.token) {
-                            self._settings.github_token = tokenRes.token;
+                            this._settings.github_token = tokenRes.token;
                         }
                     } catch(e) {}
                 }
@@ -3944,8 +4121,10 @@ const app = {
                 e.preventDefault();
                 var start = editor.selectionStart;
                 var end = editor.selectionEnd;
-                editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
-                editor.selectionStart = editor.selectionEnd = start + 4;
+                var tabSize = parseInt(self._tabSize, 10) || 4;
+                var tabSpaces = new Array(tabSize + 1).join(' ');
+                editor.value = editor.value.substring(0, start) + tabSpaces + editor.value.substring(end);
+                editor.selectionStart = editor.selectionEnd = start + tabSize;
                 self.updateHighlight();
             }
         });

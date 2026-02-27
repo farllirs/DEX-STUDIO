@@ -89,12 +89,12 @@
                         <i data-lucide="play" id="run-btn-icon"></i>
                         <span id="run-btn-text">Ejecutar</span>
                     </button>
-                    <button class="action-btn" onclick="app.compileProject()">
-                        <i data-lucide="package"></i>
-                        <span>Compilar</span>
+                    <button class="action-btn" id="core-btn-compile" onclick="app.compileProject()">
+                        <i data-lucide="package" id="core-btn-compile-icon"></i>
+                        <span id="core-btn-compile-label">Compilar</span>
                     </button>
-                    <button class="action-btn" onclick="app.toggleConsole()">
-                        <i data-lucide="terminal"></i>
+                    <button class="action-btn" id="core-btn-terminal" onclick="app.toggleConsole()">
+                        <i id="core-btn-terminal-icon" data-lucide="terminal"></i>
                         <span id="console-label">Terminal</span>
                     </button>
                 </div>
@@ -482,6 +482,9 @@
                         <button class="settings-v2-nav" data-settings-cat="about" onclick="app.switchSettingsCat('about')">
                             <i data-lucide="info"></i> Acerca de
                         </button>
+                        <button class="settings-v2-nav" data-settings-cat="developer" onclick="app.switchSettingsCat('developer')">
+                            <i data-lucide="code-2"></i> Developer
+                        </button>
                     </div>
 
                     <!-- Settings Content -->
@@ -688,6 +691,50 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="settings-v2-group">
+                                <h3 style="font-size:13px;font-weight:700;margin-bottom:8px">Novedades y parches recientes</h3>
+                                <div class="settings-v2-info-box">
+                                    <i data-lucide="sparkles"></i>
+                                    <div>
+                                        <strong>Resumen de versión</strong>
+                                        <p>Correcciones de estabilidad, mejoras del Marketplace y nueva API de UI para extensiones.</p>
+                                    </div>
+                                </div>
+                                <ul style="margin:10px 0 0 18px;color:var(--text-secondary);font-size:12px;line-height:1.5">
+                                    <li>Persistencia real de configuración: estado de terminal, minimap, word-wrap, tamaño de tab y límite de historial.</li>
+                                    <li>Nueva API <code>DEX.ui</code> para sobrescribir botones nativos del editor sin usar temas de interfaz.</li>
+                                    <li>Nueva sección <strong>Developer</strong> con catálogo de IDs de botones y targets de UI.</li>
+                                    <li>Marketplace detecta extensiones con repositorio no disponible y las oculta tras periodo de gracia.</li>
+                                    <li>Mejoras de publicación/instalación para temas: soporte consistente de <code>theme.css</code>.</li>
+                                    <li>Corrección de regresión en botón principal de Ejecutar/Probar al aplicar overrides.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Developer -->
+                        <div class="settings-v2-panel" id="settings-panel-developer">
+                            <h2 class="settings-v2-title">Developer</h2>
+                            <p class="settings-v2-desc">Catálogo de IDs/targets de UI para extensiones sin tocar el código fuente</p>
+
+                            <div class="settings-v2-group">
+                                <div class="settings-v2-info-box">
+                                    <i data-lucide="wrench"></i>
+                                    <div>
+                                        <strong>UI API</strong>
+                                        <p>Usa <code>DEX.ui.overrideButton(id, config)</code>, <code>DEX.ui.clearButton(id)</code> y <code>DEX.ui.listButtons()</code>.</p>
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;margin-top:10px">
+                                    <button class="btn-secondary btn-sm" onclick="app.renderDeveloperUICatalog()">
+                                        <i data-lucide="refresh-cw"></i> Refrescar catálogo
+                                    </button>
+                                    <button class="btn-primary btn-sm" onclick="app.copyDeveloperUICatalog()">
+                                        <i data-lucide="copy"></i> Copiar catálogo
+                                    </button>
+                                </div>
+                                <pre id="developer-ui-catalog" class="sdk-code" style="max-height:360px;overflow:auto;white-space:pre-wrap;margin-top:10px"></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -819,12 +866,25 @@ res.items.forEach(item => console.log(item.name, item.is_dir));</pre></div>
                         </div>
                         <div class="sdk-ref-panel" id="sdk-panel-ui">
                             <h2>🎨 UI API</h2>
-                            <p>Crea elementos de interfaz personalizados.</p>
+                            <p>Crea elementos de interfaz personalizados y modifica botones nativos del editor.</p>
                             <div class="sdk-method"><h4>DEX.ui.showToast(message, type, duration)</h4><p>Muestra una notificación. Tipos: 'success', 'error', 'info', 'warning'</p><pre class="sdk-code">DEX.ui.showToast('Archivo procesado!', 'success', 3000);</pre></div>
                             <div class="sdk-method"><h4>DEX.ui.createStatusBarItem(id, text)</h4><p>Crea un elemento en la barra de estado del editor.</p><pre class="sdk-code">DEX.ui.createStatusBarItem('word-count', 'Palabras: 0');</pre></div>
                             <div class="sdk-method"><h4>DEX.ui.updateStatusBarItem(id, text)</h4><p>Actualiza el texto de un elemento de la barra de estado.</p></div>
                             <div class="sdk-method"><h4>DEX.ui.removeStatusBarItem(id)</h4><p>Elimina un elemento de la barra de estado.</p></div>
                             <div class="sdk-method"><h4>DEX.ui.addContextMenuItem(label, icon, callback)</h4><p>Añade un item al menú contextual del explorador.</p></div>
+                            <div class="sdk-method"><h4>DEX.ui.overrideButton(id, config)</h4><p>Sobrescribe botón core del editor. Útil para cambiar acción, texto, icono, tooltip o visibilidad.</p><pre class="sdk-code">DEX.ui.overrideButton('terminal', {
+  label: 'Nueva Terminal',
+  icon: 'terminal-square',
+  title: 'Abrir terminal extendida',
+  action: function() { app.createTerminal(); app.toggleConsole(true); }
+});</pre></div>
+                            <div class="sdk-method"><h4>DEX.ui.clearButton(id)</h4><p>Quita el override y restaura el comportamiento original del botón.</p><pre class="sdk-code">DEX.ui.clearButton('terminal');</pre></div>
+                            <div class="sdk-method"><h4>DEX.ui.listButtons()</h4><p>Retorna catálogo de botones core disponibles (id, selector, iconSelector, labelSelector, descripción).</p><pre class="sdk-code">const buttons = DEX.ui.listButtons();
+buttons.forEach(btn =&gt; console.log(btn.id, btn.selector));</pre></div>
+                            <div class="sdk-method"><h4>IDs de botones core</h4><p>IDs soportados actualmente por la UI API:</p><pre class="sdk-code">run
+compile
+terminal
+console-toggle</pre></div>
                             <div class="sdk-method"><h4>DEX.createPanel(id, html, options)</h4><p>Crea un panel personalizado. Opciones: {position: 'right', width: '350px'}</p><pre class="sdk-code">DEX.createPanel('mi-panel', '&lt;h3&gt;Panel&lt;/h3&gt;&lt;p&gt;Contenido&lt;/p&gt;', {position: 'right'});</pre></div>
                             <div class="sdk-method"><h4>DEX.removePanel(id)</h4><p>Elimina un panel personalizado.</p></div>
                             <div class="sdk-method"><h4>DEX.showSidebar(id, html)</h4><p>Muestra un sidebar a la derecha del editor.</p></div>
@@ -976,7 +1036,7 @@ if (res.success) console.log(JSON.parse(res.data));</pre></div>
                         <i data-lucide="trash-2"></i>
                     </button>
                     <button id="console-toggle" onclick="app.toggleConsole()" title="Cerrar" class="console-btn">
-                        <i data-lucide="chevron-down"></i>
+                        <i id="console-toggle-icon" data-lucide="chevron-down"></i>
                     </button>
                 </div>
             </div>

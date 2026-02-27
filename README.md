@@ -11,6 +11,7 @@ Creador de aplicaciones para Linux con interfaz moderna, editor integrado, termi
 - Editor de código con syntax highlighting
 - Temas de editor: Oscuro, Claro, Dracula, Nord
 - Temas normales de interfaz: Dark, Light, Cyberpunk y extensiones `theme`
+- API de UI para extensiones (`DEX.ui`) para modificar botones core sin tocar el código base
 - Explorador de archivos con drag and drop
 - Terminal integrada
 - Plantillas: GUI, CLI, Web, Extensión y En Blanco
@@ -61,14 +62,25 @@ dex-studio/
 
 La documentación de extensiones está separada en su repositorio dedicado:
 
-- Repositorio: https://github.com/farllirs/dex-extensions
-- Guía: `docs/GUIA-EXTENSIONES.md`
-- SDK: `docs/SDK-REFERENCE.md`
+- Repositorio: https://github.com/farllirs/DEX-EXTENSIONS
+- Registro del Marketplace: https://github.com/farllirs/DEX-EXTENSIONS/blob/main/registry.json
+- Guía local incluida en este repo: `templates/extension/GUIA-EXTENSIONES.md`
+
+## Novedades recientes (parche)
+
+- Persistencia de configuraciones corregida (terminal visible, minimap, word-wrap, tab size, límite de historial).
+- Sección `Developer` en Configuración para ver/copiar catálogo de IDs de UI.
+- Nueva API `DEX.ui.overrideButton`, `DEX.ui.clearButton` y `DEX.ui.listButtons`.
+- Sincronización de Marketplace con detección de extensiones no disponibles:
+  - Se marca como "Extensión no disponible".
+  - Después de un periodo de gracia, se oculta automáticamente.
+- Mejoras en publicación/instalación de extensiones `theme` y `ui-theme` con manejo estable de `theme.css`.
+- Corrección de regresión del botón principal Ejecutar/Probar al usar overrides de UI.
 
 ## Repositorios
 
 - Editor: https://github.com/farllirs/DEX-STUDIO
-- Extensiones: https://github.com/farllirs/dex-extensions
+- Extensiones: https://github.com/farllirs/DEX-EXTENSIONS
 
 ## Licencia
 
