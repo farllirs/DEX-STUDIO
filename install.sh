@@ -262,25 +262,6 @@ step 1
 sudo mkdir -p "$INSTALL_DIR"
 
 step 2
-<<<<<<< HEAD
-sudo cp -r "$SCRIPT_DIR/backend" "$INSTALL_DIR/" 2>/dev/null
-
-step 3
-sudo cp -r "$SCRIPT_DIR/frontend" "$INSTALL_DIR/" 2>/dev/null
-
-step 4
-sudo cp -r "$SCRIPT_DIR/templates" "$INSTALL_DIR/" 2>/dev/null
-
-step 5
-sudo cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/" 2>/dev/null
-sudo cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/" 2>/dev/null
-sudo cp "$SCRIPT_DIR/VERSION.txt" "$INSTALL_DIR/" 2>/dev/null
-sudo cp "$SCRIPT_DIR/dex-icon.png" "$INSTALL_DIR/" 2>/dev/null
-[ -f "$SCRIPT_DIR/editor-config.json" ] && sudo cp "$SCRIPT_DIR/editor-config.json" "$INSTALL_DIR/" 2>/dev/null
-
-step 6
-sudo bash -c "cat > /usr/bin/dex-studio << 'BINEOF'
-=======
 sudo rm -rf "$INSTALL_DIR/backend"
 sudo cp -r "$SCRIPT_DIR/backend" "$INSTALL_DIR/"
 
@@ -302,7 +283,6 @@ sudo cp -f "$SCRIPT_DIR/run.sh" "$INSTALL_DIR/" 2>/dev/null
 
 step 6
 sudo tee /usr/bin/dex-studio > /dev/null << BINEOF
->>>>>>> 82e814f (v1.0.3: custom window bar, normal themes fixes, docs and icon update)
 #!/bin/bash
 cd "$INSTALL_DIR" && python3 main.py "\$@"
 BINEOF
@@ -313,11 +293,7 @@ sudo mkdir -p /usr/share/icons/hicolor/256x256/apps
 sudo cp -f "$SCRIPT_DIR/dex-icon.png" /usr/share/icons/hicolor/256x256/apps/dex-studio.png
 
 step 8
-<<<<<<< HEAD
-sudo bash -c "cat > /usr/share/applications/dex-studio.desktop << DTEOF
-=======
 sudo tee /usr/share/applications/dex-studio.desktop > /dev/null << DTEOF
->>>>>>> 82e814f (v1.0.3: custom window bar, normal themes fixes, docs and icon update)
 [Desktop Entry]
 Type=Application
 Name=DEX STUDIO
@@ -330,34 +306,13 @@ Categories=Development;IDE;
 Keywords=IDE;editor;development;python;
 StartupWMClass=dex-studio
 X-Author=farllirs/dex
-<<<<<<< HEAD
-DTEOF"
-=======
 DTEOF
->>>>>>> 82e814f (v1.0.3: custom window bar, normal themes fixes, docs and icon update)
 
 step 9
 DESKTOP_DIR="$HOME/Escritorio"
 [ -d "$HOME/Desktop" ] && DESKTOP_DIR="$HOME/Desktop"
 
-<<<<<<< HEAD
-cat > "$DESKTOP_DIR/dex-studio.desktop" << DESKEOF
-[Desktop Entry]
-Type=Application
-Name=DEX STUDIO
-GenericName=IDE para Linux
-Comment=Creador de aplicaciones para Linux
-Exec=bash -c 'cd $INSTALL_DIR && bash run.sh || python3 main.py'
-Icon=$INSTALL_DIR/dex-icon.png
-Terminal=false
-Categories=Development;IDE;
-Keywords=IDE;editor;development;python;
-StartupWMClass=dex-studio
-X-Author=farllirs/dex
-DESKEOF
-=======
 cp -f /usr/share/applications/dex-studio.desktop "$DESKTOP_DIR/dex-studio.desktop"
->>>>>>> 82e814f (v1.0.3: custom window bar, normal themes fixes, docs and icon update)
 chmod +x "$DESKTOP_DIR/dex-studio.desktop"
 gio set "$DESKTOP_DIR/dex-studio.desktop" metadata::trusted true 2>/dev/null
 dbus-launch gio set "$DESKTOP_DIR/dex-studio.desktop" metadata::trusted true 2>/dev/null
