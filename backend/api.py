@@ -10,7 +10,8 @@ from backend.extensions_db import ExtensionsDB
 
 class API:
     def __init__(self):
-        self.window = None
+        # Keep window reference private so pywebview js_api introspection ignores it.
+        self._window = None
         self._window_maximized = False
         self.current_project_path = None
         self.projects_root = os.path.join(os.path.expanduser("~"), 'DEX_Projects')
@@ -34,31 +35,31 @@ class API:
             pass
 
     def set_window(self, window):
-        self.window = window
+        self._window = window
 
     def toggle_devtools(self):
-        if self.window:
+        if self._window:
             return {'success': True, 'message': 'Usa CTRL+SHIFT+I para inspeccionar (Modo Debug Activo)'}
         return {'success': False}
 
     def window_minimize(self):
         try:
-            if not self.window:
+            if not self._window:
                 return {'success': False, 'error': 'Ventana no inicializada'}
-            self.window.minimize()
+            self._window.minimize()
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
     def window_toggle_maximize(self):
         try:
-            if not self.window:
+            if not self._window:
                 return {'success': False, 'error': 'Ventana no inicializada'}
             if self._window_maximized:
-                self.window.restore()
+                self._window.restore()
                 self._window_maximized = False
             else:
-                self.window.maximize()
+                self._window.maximize()
                 self._window_maximized = True
             return {'success': True, 'maximized': self._window_maximized}
         except Exception as e:
@@ -66,9 +67,9 @@ class API:
 
     def window_close(self):
         try:
-            if not self.window:
+            if not self._window:
                 return {'success': False, 'error': 'Ventana no inicializada'}
-            self.window.destroy()
+            self._window.destroy()
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
