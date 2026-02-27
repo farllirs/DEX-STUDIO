@@ -5,6 +5,7 @@ import subprocess
 import re
 import base64
 import urllib.error
+from datetime import datetime, timedelta
 from backend.packager import Packager
 from backend.extensions_db import ExtensionsDB
 
@@ -732,13 +733,22 @@ class API:
             with open(os.path.join(ext_dir, 'manifest.json'), 'w') as f:
                 json.dump(manifest, f, indent=4)
 
-            # Download main.js
-            main_url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/main.js'
-            req = urllib.request.Request(main_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                main_code = response.read().decode('utf-8')
-            with open(os.path.join(ext_dir, 'main.js'), 'w') as f:
-                f.write(main_code)
+            # Download extension entrypoint (main.js or extension.dex.js)
+            js_downloaded = False
+            for js_name in ['main.js', 'extension.dex.js']:
+                try:
+                    js_url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/{js_name}'
+                    req = urllib.request.Request(js_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        js_code = response.read().decode('utf-8')
+                    with open(os.path.join(ext_dir, js_name), 'w') as f:
+                        f.write(js_code)
+                    js_downloaded = True
+                    break
+                except urllib.error.HTTPError:
+                    continue
+            if not js_downloaded:
+                raise FileNotFoundError(f'No se encontró main.js ni extension.dex.js para "{ext_id}"')
 
             # Download README.md
             try:
@@ -765,6 +775,33 @@ class API:
                             f.write(wl_data)
                     except:
                         pass
+
+            # Download additional files declared in manifest
+            extra_files = manifest.get('files', [])
+            for extra in extra_files:
+                try:
+                    f_url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/{extra}'
+                    req = urllib.request.Request(f_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        f_content = response.read().decode('utf-8')
+                    f_path = os.path.join(ext_dir, extra)
+                    os.makedirs(os.path.dirname(f_path), exist_ok=True)
+                    with open(f_path, 'w', encoding='utf-8') as f:
+                        f.write(f_content)
+                except:
+                    pass
+
+            # For theme/ui-theme extensions, try downloading theme.css even if not listed in manifest.files
+            try:
+                if manifest.get('category') in ('theme', 'ui-theme') or manifest.get('type') == 'ui-theme':
+                    css_url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/theme.css'
+                    req = urllib.request.Request(css_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        css_content = response.read().decode('utf-8')
+                    with open(os.path.join(ext_dir, 'theme.css'), 'w', encoding='utf-8') as f:
+                        f.write(css_content)
+            except:
+                pass
 
             self.ext_db.mark_installed(ext_id)
             self.ext_db.add_extension({
@@ -1015,6 +1052,8 @@ class API:
                     return json.loads(resp.read().decode('utf-8'))
 
             upload_file(f'extensions/{ext_id}/main.js', js_content)
+            # Keep compatibility with extension loader variants
+            upload_file(f'extensions/{ext_id}/extension.dex.js', js_content)
 
             with open(manifest_path, 'r') as f:
                 manifest_content = f.read()
@@ -1025,6 +1064,13 @@ class API:
                 with open(readme_path, 'r') as f:
                     readme_content = f.read()
                 upload_file(f'extensions/{ext_id}/README.md', readme_content)
+
+            # Upload theme.css when present so marketplace installs can detect themes
+            theme_css_path = os.path.join(self.current_project_path, 'theme.css')
+            if os.path.exists(theme_css_path):
+                with open(theme_css_path, 'r', encoding='utf-8') as f:
+                    theme_css_content = f.read()
+                upload_file(f'extensions/{ext_id}/theme.css', theme_css_content)
 
             registry_url = f'https://api.github.com/repos/{repo}/contents/registry.json'
             req = urllib.request.Request(registry_url, headers=headers)
@@ -1371,6 +1417,18 @@ class API:
                 except:
                     pass
 
+            # For theme/ui-theme extensions, try downloading theme.css even if not listed in manifest.files
+            try:
+                if manifest.get('category') in ('theme', 'ui-theme') or manifest.get('type') == 'ui-theme':
+                    css_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/theme.css'
+                    req = urllib.request.Request(css_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        css_content = response.read().decode('utf-8')
+                    with open(os.path.join(ext_dir, 'theme.css'), 'w', encoding='utf-8') as f:
+                        f.write(css_content)
+            except:
+                pass
+
             # Try downloading README.md
             try:
                 readme_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/README.md'
@@ -1616,6 +1674,43 @@ class API:
         """Fetch remote registry and sync with local DB"""
         try:
             import urllib.request
+            hide_after_days = int(os.getenv('DEX_EXT_UNAVAILABLE_HIDE_DAYS', '14'))
+            check_interval_hours = int(os.getenv('DEX_EXT_AVAIL_CHECK_HOURS', '24'))
+            now = datetime.utcnow()
+
+            # Availability cache persisted in user_config
+            cache_key = 'marketplace_repo_status_v1'
+            try:
+                availability_cache = json.loads(self.ext_db.get_config(cache_key) or '{}')
+                if not isinstance(availability_cache, dict):
+                    availability_cache = {}
+            except Exception:
+                availability_cache = {}
+
+            def _parse_repo(repo_url):
+                if not repo_url or 'github.com' not in repo_url:
+                    return None, None
+                parts = repo_url.rstrip('/').split('/')
+                if len(parts) < 2:
+                    return None, None
+                owner = parts[-2]
+                repo = parts[-1].replace('.git', '')
+                return owner, repo
+
+            def _repo_has_manifest(repo_url):
+                owner, repo = _parse_repo(repo_url)
+                if not owner or not repo:
+                    return False
+                for branch in ['main', 'master']:
+                    try:
+                        test_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/manifest.json'
+                        req = urllib.request.Request(test_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                        with urllib.request.urlopen(req, timeout=8):
+                            return True
+                    except Exception:
+                        continue
+                return False
+
             url = 'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/registry.json'
             req = urllib.request.Request(url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
@@ -1643,7 +1738,61 @@ class API:
                 else:
                     entry['downloads'] = 0
                     entry['is_disabled'] = 0
-                merged.append(entry)
+
+                # Detect unavailable repos and hide after grace period
+                repo_url = entry.get('repo_url')
+                state = availability_cache.get(ext_id, {})
+                status = state.get('status', 'ok')
+                last_check = state.get('last_check')
+                should_check = True
+
+                if last_check:
+                    try:
+                        last_dt = datetime.fromisoformat(last_check)
+                        if now - last_dt < timedelta(hours=check_interval_hours):
+                            should_check = False
+                    except Exception:
+                        should_check = True
+
+                if repo_url and should_check:
+                    ok = _repo_has_manifest(repo_url)
+                    state['last_check'] = now.isoformat()
+                    if ok:
+                        state['status'] = 'ok'
+                        state.pop('first_unavailable_at', None)
+                        state.pop('last_unavailable_at', None)
+                    else:
+                        state['status'] = 'unavailable'
+                        if not state.get('first_unavailable_at'):
+                            state['first_unavailable_at'] = now.isoformat()
+                        state['last_unavailable_at'] = now.isoformat()
+
+                availability_cache[ext_id] = state
+                status = state.get('status', status)
+
+                unavailable_since = state.get('first_unavailable_at')
+                is_unavailable = (status == 'unavailable')
+                hide_from_marketplace = False
+                if is_unavailable and unavailable_since:
+                    try:
+                        first_dt = datetime.fromisoformat(unavailable_since)
+                        hide_from_marketplace = (now - first_dt) >= timedelta(days=hide_after_days)
+                    except Exception:
+                        hide_from_marketplace = False
+
+                entry['unavailable'] = bool(is_unavailable)
+                entry['unavailable_since'] = unavailable_since
+                entry['hidden'] = bool(hide_from_marketplace)
+                entry['availability_message'] = 'Extensión no disponible' if is_unavailable else ''
+
+                if not hide_from_marketplace:
+                    merged.append(entry)
+
+            # Persist refreshed availability cache
+            try:
+                self.ext_db.set_config(cache_key, json.dumps(availability_cache))
+            except Exception:
+                pass
 
             return {'success': True, 'extensions': merged}
         except Exception as e:

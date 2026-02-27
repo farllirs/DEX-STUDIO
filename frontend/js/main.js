@@ -3119,6 +3119,7 @@ const app = {
         allExts.forEach(function(ext) {
             // Usar campo 'installed' del backend (disk check) O comparar con IDs
             var isInstalled = ext.installed === true || installedIds.includes(ext.id);
+            var isUnavailable = ext.unavailable === true;
             var card = document.createElement('div');
             card.className = 'ext-v2-card';
 
@@ -3128,6 +3129,7 @@ const app = {
             if (ext.category) metaParts.push(ext.category);
             if (ext.downloads) metaParts.push(ext.downloads + ' descargas');
             if (ext.repo_url) metaParts.push('📦 Repo propio');
+            if (isUnavailable) metaParts.push('⛔ Extensión no disponible');
 
             card.innerHTML =
                 '<div class="ext-v2-card-icon" style="background:' + color + '">' +
@@ -3141,7 +3143,9 @@ const app = {
                 '<div class="ext-v2-card-actions">' +
                     (isInstalled
                         ? '<span class="ext-v2-status ext-v2-status-installed">Instalada ✓</span>'
-                        : '<button class="ext-v2-btn-install" data-ext-id="' + ext.id + '"><i data-lucide="download" style="width:12px;height:12px"></i> Instalar</button>'
+                        : (isUnavailable
+                            ? '<span class="ext-v2-status ext-v2-status-disabled">Extensión no disponible</span>'
+                            : '<button class="ext-v2-btn-install" data-ext-id="' + ext.id + '"><i data-lucide="download" style="width:12px;height:12px"></i> Instalar</button>')
                     ) +
                 '</div>';
 
@@ -3217,6 +3221,7 @@ const app = {
         var actionsEl = document.getElementById('ext-detail-actions');
         var isActive = !!DEX.extensions[ext.id];
         var isDisabled = !!ext.is_disabled;
+        var isUnavailable = ext.unavailable === true;
         if (isInstalled) {
             var statusClass, statusText;
             if (isDisabled) { statusClass = 'ext-v2-status-disabled'; statusText = '⏸ Desactivada'; }
@@ -3232,10 +3237,14 @@ const app = {
                 '<button class="' + toggleBtnClass + '" style="padding:4px 10px;width:auto;gap:4px" onclick="app.toggleExtension(\'' + ext.id + '\')"><i data-lucide="' + toggleIcon + '" style="width:12px;height:12px"></i> ' + toggleLabel + '</button>' +
                 '<button class="ext-v2-btn-uninstall" onclick="app.uninstallExtension(\'' + ext.id + '\')"><i data-lucide="trash-2" style="width:12px;height:12px"></i> Desinstalar</button>';
         } else {
-            var installFn = ext.repo_url
-                ? 'app.installExtensionV2(\'' + ext.id + '\',\'' + (ext.repo_url || '') + '\')'
-                : 'app.installExtension(\'' + ext.id + '\')';
-            actionsEl.innerHTML = '<button class="ext-v2-btn-install" style="padding:6px 16px;font-size:12px" onclick="' + installFn + '"><i data-lucide="download" style="width:13px;height:13px"></i> Instalar</button>';
+            if (isUnavailable) {
+                actionsEl.innerHTML = '<span class="ext-v2-status ext-v2-status-disabled" style="padding:6px 12px;font-size:12px">Extensión no disponible</span>';
+            } else {
+                var installFn = ext.repo_url
+                    ? 'app.installExtensionV2(\'' + ext.id + '\',\'' + (ext.repo_url || '') + '\')'
+                    : 'app.installExtension(\'' + ext.id + '\')';
+                actionsEl.innerHTML = '<button class="ext-v2-btn-install" style="padding:6px 16px;font-size:12px" onclick="' + installFn + '"><i data-lucide="download" style="width:13px;height:13px"></i> Instalar</button>';
+            }
         }
 
         // README
