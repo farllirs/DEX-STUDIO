@@ -3,6 +3,26 @@ import os
 import sys
 from backend.api import API
 
+def _select_linux_gui():
+    forced = os.getenv('DEX_WEBVIEW_GUI', '').strip().lower()
+    if forced in ('gtk', 'qt'):
+        return forced
+
+    try:
+        import gi
+        gi.require_version('Gtk', '3.0')
+        return 'gtk'
+    except Exception:
+        pass
+
+    try:
+        import qtpy  # noqa: F401
+        return 'qt'
+    except Exception:
+        pass
+
+    return None
+
 def main():
     # Path setup
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +63,14 @@ def main():
     window.events.shown += on_shown
     
     # Start
-    webview.start(debug=False, gui='qt' if sys.platform == 'linux' else None)
+    if sys.platform.startswith('linux'):
+        gui = _select_linux_gui()
+        if gui:
+            webview.start(debug=False, gui=gui)
+        else:
+            webview.start(debug=False)
+    else:
+        webview.start(debug=False)
 
 if __name__ == '__main__':
     main()
