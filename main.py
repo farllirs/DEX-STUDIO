@@ -57,6 +57,8 @@ def main():
                 if w.get_title() and 'DEX' in w.get_title():
                     pixbuf = GdkPixbuf.Pixbuf.new_from_file(icon_path)
                     w.set_icon(pixbuf)
+                    api.set_gtk_window(w)
+                    break
         except Exception:
             pass
     

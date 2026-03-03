@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DEX SDK Reference</title>
+  <style>
+    :root {
+      --bg: #0f1420;
+      --bg-soft: #151c2b;
+      --panel: #1a2233;
+      --line: rgba(255,255,255,.08);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.62);
+      --accent: #58a6ff;
+      --ok: #3fb950;
+      --icon-filter: invert(1) brightness(1.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; height: 100vh; }
+    .sidebar { border-right: 1px solid var(--line); background: var(--bg-soft); overflow: auto; }
+    .brand { display:flex; align-items:center; gap:8px; padding:14px 12px; border-bottom:1px solid var(--line); font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+    .brand img { width:16px; height:16px; }
+    .nav-btn { width:100%; display:flex; align-items:center; gap:8px; border:0; background:transparent; color:var(--muted); padding:8px 12px; text-align:left; cursor:pointer; font-size:12px; border-left:2px solid transparent; }
+    .nav-btn:hover { background: rgba(255,255,255,.03); color: var(--text); }
+    .nav-btn.active { color: var(--accent); background: rgba(88,166,255,.08); border-left-color: var(--accent); }
+    .nav-btn img { width:15px; height:15px; }
+    .content { overflow: auto; padding: 22px 24px; }
+    .panel { display: none; max-width: 1100px; }
+    .panel.active { display: block; }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    h2 { margin: 0 0 10px; font-size: 21px; }
+    h3 { margin: 20px 0 10px; font-size: 14px; }
+    p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-top:8px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+    .card strong { display:block; margin-bottom: 6px; }
+    .method { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
+    .method-head { display:flex; align-items:center; gap:8px; margin-bottom: 6px; }
+    .method-head img { width: 16px; height: 16px; }
+    img.icon-ui { filter: var(--icon-filter); }
+    .method code { color: var(--accent); font-family: 'Fira Code', ui-monospace, monospace; font-size: 12px; }
+    pre { margin: 8px 0 0; background: #101729; border: 1px solid var(--line); border-radius: 10px; padding: 10px; overflow:auto; color: #8ec5ff; font-size: 12px; line-height: 1.55; }
+    .chip { display:inline-block; padding: 3px 8px; border-radius: 999px; border:1px solid var(--line); background: rgba(255,255,255,.04); font-size:11px; color: var(--muted); margin-right: 6px; margin-bottom: 6px; }
+    .ok { color: var(--ok); }
+    .guide-hero { background: linear-gradient(145deg, rgba(88,166,255,.12), rgba(63,185,80,.10)); border:1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .guide-flow { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-top: 10px; }
+    .guide-step { background: var(--panel); border:1px solid var(--line); border-radius: 12px; padding: 12px; }
+    .guide-step strong { display:block; margin-bottom:6px; }
+    .guide-step code { color: var(--accent); }
+    .guide-check { margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; background: rgba(255,255,255,.02); }
+    .guide-check li { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
+    body[data-theme='light'] { --icon-filter: none; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="icon-ui" src="../assets/icons-ui/ui.book.svg" alt="">
+        <span>SDK Reference</span>
+      </div>
+      <button class="nav-btn active" data-cat="overview"><img class="icon-ui" src="../assets/icons-ui/ui.home.svg" alt="">Visión General</button>
+      <button class="nav-btn" data-cat="filesystem"><img class="icon-ui" src="../assets/icons-ui/ui.folder.svg" alt="">File System</button>
+      <button class="nav-btn" data-cat="editor"><img class="icon-ui" src="../assets/icons-ui/ui.code.svg" alt="">Editor</button>
+      <button class="nav-btn" data-cat="ui"><img class="icon-ui" src="../assets/icons-ui/ui.palette.svg" alt="">UI</button>
+      <button class="nav-btn" data-cat="dialog"><img class="icon-ui" src="../assets/icons-ui/ui.info.svg" alt="">Dialog</button>
+      <button class="nav-btn" data-cat="events"><img class="icon-ui" src="../assets/icons-ui/ui.sparkle.svg" alt="">Events</button>
+      <button class="nav-btn" data-cat="shell"><img class="icon-ui" src="../assets/icons-ui/ui.terminal.svg" alt="">Shell</button>
+      <button class="nav-btn" data-cat="storage"><img class="icon-ui" src="../assets/icons-ui/ui.save.svg" alt="">Storage</button>
+      <button class="nav-btn" data-cat="http"><img class="icon-ui" src="../assets/icons-ui/ui.globe.svg" alt="">HTTP</button>
+      <button class="nav-btn" data-cat="project"><img class="icon-ui" src="../assets/icons-ui/ui.package.svg" alt="">Project</button>
+      <button class="nav-btn" data-cat="themes"><img class="icon-ui" src="../assets/icons-ui/ui.settings.svg" alt="">Themes</button>
+      <button class="nav-btn" data-cat="git-guide"><img class="icon-ui" src="../assets/icons-ui/ui.folder_open.svg" alt="">Git para Principiantes</button>
+    </aside>
+
+    <main class="content">
+      <section class="panel active" id="panel-overview">
+        <h1>DEX STUDIO SDK</h1>
+        <p>Referencia oficial para crear extensiones y usar APIs de DEX de forma estable.</p>
+        <div class="card">
+          <strong>Inicio rápido</strong>
+          <pre>DEX.registerExtension({
+  id: 'mi-extension',
+  name: 'Mi Extension',
+  version: '1.0.0',
+  description: 'Describe la funcion principal'
+}, {
+  onInit: function() {
+    DEX.log('Extension cargada');
+  }
+});
+// Dex code successful</pre>
+        </div>
+        <h3>Tipos de extensión</h3>
+        <div class="grid">
+          <div class="card"><strong>editor</strong><p>Editor, comandos, productividad, análisis.</p></div>
+          <div class="card"><strong>theme</strong><p>Temas visuales de la interfaz principal.</p></div>
+          <div class="card"><strong>ui-theme</strong><p>Diseño de layout y variables UI completas.</p></div>
+          <div class="card"><strong>language</strong><p>Extiende soporte de lenguajes/formatos.</p></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-filesystem">
+        <h2>File System API</h2>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.file.svg" alt=""><code>DEX.fs.readFile(path)</code></div><p>Lee archivo.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.edit.svg" alt=""><code>DEX.fs.writeFile(path, content)</code></div><p>Escribe archivo.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.folder_open.svg" alt=""><code>DEX.fs.listDir(path)</code></div><p>Lista directorio.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.plus.svg" alt=""><code>DEX.fs.createFile(path)</code></div><p>Crea archivo vacío.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.folder.svg" alt=""><code>DEX.fs.createDir(path)</code></div><p>Crea carpeta.</p></div>
+      </section>
+
+      <section class="panel" id="panel-editor">
+        <h2>Editor API</h2>
+        <p>Control directo de contenido, selección y cursor.</p>
+        <div class="chip">DEX.editor.getContent()</div><div class="chip">DEX.editor.setContent(text)</div><div class="chip">DEX.editor.getSelection()</div><div class="chip">DEX.editor.replaceSelection(text)</div><div class="chip">DEX.editor.insertAtCursor(text)</div><div class="chip">DEX.editor.getCursor()</div>
+      </section>
+
+      <section class="panel" id="panel-ui">
+        <h2>UI API</h2>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.sparkle.svg" alt=""><code>DEX.ui.showToast(message, type, duration)</code></div><p>Notificaciones rápidas.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.settings.svg" alt=""><code>DEX.ui.overrideButton(id, config)</code></div><p>Personaliza botones core.</p></div>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.edit.svg" alt=""><code>DEX.createPanel(id, html, options)</code></div><p>Paneles personalizados para extensiones.</p></div>
+      </section>
+
+      <section class="panel" id="panel-dialog">
+        <h2>Dialog API</h2>
+        <div class="chip">DEX.dialog.alert(message, title)</div><div class="chip">DEX.dialog.confirm(message, title)</div><div class="chip">DEX.dialog.prompt(title, placeholder, defaultValue)</div><div class="chip">DEX.dialog.select(title, options)</div>
+      </section>
+
+      <section class="panel" id="panel-events">
+        <h2>Events API</h2>
+        <p>Eventos principales disponibles:</p>
+        <div class="chip">fileOpen</div><div class="chip">fileSave</div><div class="chip">fileClose</div><div class="chip">projectOpen</div>
+      </section>
+
+      <section class="panel" id="panel-shell">
+        <h2>Shell API</h2>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.terminal.svg" alt=""><code>DEX.shell.exec(command)</code></div><p>Ejecuta comandos y retorna <code>{success, stdout, stderr, code}</code>.</p></div>
+      </section>
+
+      <section class="panel" id="panel-storage">
+        <h2>Storage API</h2>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.save.svg" alt=""><code>DEX.storage.forExtension(extId)</code></div><p>Almacenamiento persistente por extensión.</p></div>
+      </section>
+
+      <section class="panel" id="panel-http">
+        <h2>HTTP API</h2>
+        <div class="method"><div class="method-head"><img class="icon-ui" src="../assets/icons-ui/ui.globe.svg" alt=""><code>DEX.http.fetch(url, options)</code></div><p>Wrapper HTTP para extensiones.</p></div>
+      </section>
+
+      <section class="panel" id="panel-project">
+        <h2>Project API</h2>
+        <div class="chip">DEX.project.getPath()</div><div class="chip">DEX.project.getName()</div><div class="chip">DEX.project.getOpenFiles()</div><div class="chip">DEX.project.getCurrentFile()</div><div class="chip">DEX.project.getLanguage()</div><div class="chip">DEX.project.isExtension()</div>
+      </section>
+
+      <section class="panel" id="panel-themes">
+        <h2>Themes</h2>
+        <p>Para temas UI usa <code>manifest.json</code> con <code>category: "theme"</code> o <code>type: "ui-theme"</code> y define variables en <code>theme.css</code>.</p>
+        <pre>{
+  "id": "mi-tema",
+  "name": "Mi Tema",
+  "version": "1.0.0",
+  "category": "theme",
+  "type": "ui-theme"
+}</pre>
+        <p class="ok">Recomendado: mantener IDs únicos y semver consistente.</p>
+      </section>
+
+      <section class="panel" id="panel-git-guide">
+        <h2>Git y GitHub para Principiantes</h2>
+        <p>Guía visual para usar Git en DEX STUDIO sin tocar terminal.</p>
+
+        <div class="guide-hero">
+          <strong>Ruta rápida recomendada</strong>
+          <p>Primero configura tu perfil en <code>Configuración > Git</code> (token, nombre y correo). Luego entra a <code>Git Workspace</code> para inicializar/clonar, hacer commit y push.</p>
+        </div>
+
+        <div class="guide-flow">
+          <div class="guide-step">
+            <strong>1. Configura tu perfil</strong>
+            <p>Ve a <code>Configuración > Git</code> y guarda:</p>
+            <div class="chip">Token GitHub</div>
+            <div class="chip">Nombre</div>
+            <div class="chip">Correo</div>
+          </div>
+          <div class="guide-step">
+            <strong>2. Prepara un repositorio</strong>
+            <p>En <code>Git Workspace</code> elige:</p>
+            <div class="chip">Inicializar actual</div>
+            <div class="chip">o Clonar repo</div>
+          </div>
+          <div class="guide-step">
+            <strong>3. Revisa cambios</strong>
+            <p>Usa la lista de cambios para hacer <code>Stage</code>, <code>Unstage</code> o <code>Descartar</code>.</p>
+          </div>
+          <div class="guide-step">
+            <strong>4. Commit</strong>
+            <p>Escribe mensaje claro y presiona <code>Commit</code>.</p>
+          </div>
+          <div class="guide-step">
+            <strong>5. Conecta remoto</strong>
+            <p>Pega URL en <code>Remote URL (origin)</code> y pulsa <code>Set Remote</code>.</p>
+          </div>
+          <div class="guide-step">
+            <strong>6. Push</strong>
+            <p>Presiona <code>Push</code>. DEX STUDIO aplicará tu nombre/correo configurados antes de subir.</p>
+          </div>
+        </div>
+
+        <div class="guide-check">
+          <strong>Checklist de errores comunes</strong>
+          <ul>
+            <li>Si el push falla por permisos: revisa que el token tenga acceso al repositorio.</li>
+            <li>Si el commit sale con autor incorrecto: vuelve a guardar nombre/correo en Configuración > Git.</li>
+            <li>Si no ves repositorios: abre o clona uno dentro de tu carpeta de proyectos.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function() {
+      function setCat(cat) {
+        document.querySelectorAll('.nav-btn').forEach(function(btn) {
+          btn.classList.toggle('active', btn.getAttribute('data-cat') === cat);
+        });
+        document.querySelectorAll('.panel').forEach(function(panel) {
+          panel.classList.toggle('active', panel.id === 'panel-' + cat);
+        });
+      }
+      document.querySelectorAll('.nav-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          setCat(btn.getAttribute('data-cat'));
+        });
+      });
+      function applyTheme(themeData) {
+        if (!themeData || !themeData.vars) return;
+        var root = document.documentElement;
+        root.style.setProperty('--bg', themeData.vars.bgBase || '#0f1420');
+        root.style.setProperty('--bg-soft', themeData.vars.bgSurface || '#151c2b');
+        root.style.setProperty('--panel', themeData.vars.bgElevated || '#1a2233');
+        root.style.setProperty('--line', themeData.vars.border || 'rgba(255,255,255,.08)');
+        root.style.setProperty('--text', themeData.vars.textPrimary || 'rgba(255,255,255,.92)');
+        root.style.setProperty('--muted', themeData.vars.textSecondary || 'rgba(255,255,255,.62)');
+        root.style.setProperty('--accent', themeData.vars.accent || '#58a6ff');
+        document.body.setAttribute('data-theme', themeData.isLight ? 'light' : 'dark');
+      }
+
+      window.addEventListener('message', function(event) {
+        if (!event || !event.data || event.data.type !== 'dex-sdk-theme') return;
+        applyTheme(event.data.payload);
+      });
+
+      window.DEXSdkRef = {
+        switchCat: setCat,
+        applyTheme: applyTheme
+      };
+    })();
+  </script>
+</body>
+</html>

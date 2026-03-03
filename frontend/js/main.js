@@ -1,3 +1,185 @@
+// ─── Local Icons (replaces external lucide dependency) ───
+(function() {
+    var ICON_BASE = 'assets/icons';
+    var FALLBACK_ICON = 'code';
+
+    var ALIASES = {
+        'app-window': 'apps',
+        archive: 'archive',
+        'alert-triangle': 'warning',
+        'book-open': 'library_books',
+        bug: 'bug_report',
+        'check-circle': 'check_circle',
+        'chevron-down': 'expand_more',
+        'chevron-right': 'chevron_right',
+        'chevron-up': 'expand_less',
+        'circle-help': 'help_center',
+        clipboard: 'content_copy',
+        clock: 'history',
+        'code-2': 'code',
+        cone: 'science',
+        copy: 'content_copy',
+        'copy-plus': 'file_copy',
+        download: 'download',
+        file: 'insert_drive_file',
+        'file-archive': 'archive',
+        'file-plus': 'note_add',
+        'file-plus-2': 'note_add',
+        'file-text': 'description',
+        'file-x': 'error_outline',
+        files: 'view_list',
+        folder: 'folder',
+        'folder-open': 'folder_open',
+        'folder-plus': 'create_new_folder',
+        'git-branch': 'compare_arrows',
+        github: 'code',
+        globe: 'public',
+        'hard-drive-download': 'cloud_download',
+        key: 'vpn_key',
+        keyboard: 'keyboard',
+        loader: 'autorenew',
+        menu: 'menu',
+        'message-square-code': 'code',
+        monitor: 'dashboard_customize',
+        move: 'open_with',
+        package: 'inventory',
+        'package-check': 'check_circle',
+        pause: 'pause',
+        paintbrush: 'brush',
+        palette: 'palette',
+        pencil: 'edit',
+        play: 'play_arrow',
+        'plus-circle': 'add',
+        puzzle: 'widgets',
+        'redo-2': 'autorenew',
+        'refresh-cw': 'refresh',
+        rocket: 'flight_takeoff',
+        'rotate-ccw': 'refresh',
+        save: 'save_alt',
+        scissors: 'delete',
+        search: 'search',
+        'search-x': 'highlight_off',
+        settings: 'settings',
+        'settings-2': 'tune',
+        'sliders-horizontal': 'tune',
+        sparkles: 'bolt',
+        square: 'radio_button_unchecked',
+        store: 'store',
+        'sun-moon': 'invert_colors',
+        terminal: 'code',
+        'text-select': 'article',
+        trash: 'delete',
+        'trash-2': 'delete_forever',
+        type: 'label',
+        'undo-2': 'autorenew',
+        upload: 'upload',
+        'flask-conical': 'science',
+        'wifi-off': 'highlight_off',
+        wrench: 'construction',
+        info: 'info',
+        x: 'close',
+        'x-circle': 'error_outline',
+        zap: 'bolt'
+    };
+
+    function normalizeIconName(name) {
+        return String(name || '').trim().toLowerCase();
+    }
+
+    function resolveIconFile(name) {
+        var normalized = normalizeIconName(name);
+        var underscored = normalized.replace(/-/g, '_');
+        var mapped = ALIASES[normalized] || ALIASES[underscored] || underscored;
+        var resolved = mapped || FALLBACK_ICON;
+        return resolved;
+    }
+
+    function buildIconCandidates(name) {
+        var key = resolveIconFile(name);
+        var variants = [];
+        function addVariant(v) {
+            if (!v) return;
+            if (variants.indexOf(v) === -1) variants.push(v);
+        }
+        addVariant(key);
+        addVariant(key.replace(/-/g, '_'));
+        addVariant(key.replace(/_/g, '-'));
+
+        var paths = [];
+        variants.forEach(function(v) {
+            paths.push({ src: 'assets/icons-ui/ui.' + v + '.svg', tone: 'mono' });
+            paths.push({ src: 'assets/icons-dev/dev.' + v + '.svg', tone: 'color' });
+            paths.push({ src: ICON_BASE + '/dex.' + v + '.png', tone: 'mono' });
+            paths.push({ src: ICON_BASE + '/dex.' + v + '.svg', tone: 'mono' });
+        });
+        paths.push({ src: ICON_BASE + '/dex.' + FALLBACK_ICON + '.png', tone: 'mono' });
+        return paths;
+    }
+
+    function applyIcon(el) {
+        if (!el || !el.getAttribute) return;
+        var iconName = el.getAttribute('data-lucide');
+        if (!iconName) return;
+        var iconKey = normalizeIconName(iconName);
+
+        var candidates = buildIconCandidates(iconName);
+        el.classList.add('dex-local-icon');
+        el.setAttribute('aria-hidden', 'true');
+        if (!el.style.width) el.style.width = '16px';
+        if (!el.style.height) el.style.height = '16px';
+        if (el.tagName && el.tagName.toLowerCase() === 'img') {
+            if (el.dataset.dexIconKey === iconKey && el.getAttribute('src')) return;
+            var idxImg = 0;
+            el.setAttribute('src', candidates[idxImg].src);
+            el.dataset.iconTone = candidates[idxImg].tone;
+            el.dataset.dexIconKey = iconKey;
+            el.onerror = function() {
+                idxImg += 1;
+                if (idxImg >= candidates.length) {
+                    this.onerror = null;
+                    return;
+                }
+                this.setAttribute('src', candidates[idxImg].src);
+                this.dataset.iconTone = candidates[idxImg].tone;
+            };
+            return;
+        }
+        var img = el.querySelector('img[data-dex-icon-img]');
+        if (!img) {
+            el.textContent = '';
+            img = document.createElement('img');
+            img.setAttribute('data-dex-icon-img', '1');
+            img.alt = '';
+            img.className = 'dex-local-icon-img';
+            el.appendChild(img);
+        }
+        if (el.dataset.dexIconKey === iconKey && img.getAttribute('src')) return;
+        var idx = 0;
+        img.src = candidates[idx].src;
+        img.dataset.iconTone = candidates[idx].tone;
+        el.dataset.dexIconKey = iconKey;
+        img.onerror = function() {
+            idx += 1;
+            if (idx >= candidates.length) return;
+            this.src = candidates[idx].src;
+            this.dataset.iconTone = candidates[idx].tone;
+        };
+    }
+
+    function createIcons(options) {
+        var root = (options && options.root) ? options.root : document;
+        if (root && root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-lucide')) {
+            applyIcon(root);
+        }
+        var nodes = root.querySelectorAll ? root.querySelectorAll('[data-lucide]') : [];
+        nodes.forEach(applyIcon);
+    }
+
+    window.lucide = {
+        createIcons: createIcons
+    };
+})();
+
 // ─── DEX Extension API ───
 const DEX = {
     extensions: {},
@@ -645,7 +827,7 @@ const app = {
     currentProjectPath: null,
     currentFilePath: null,
     sidebarOpen: true,
-    consoleOpen: true,
+    consoleOpen: false,
     uiTheme: 'dark',
     editorTheme: 'dark',
     contextPath: null,
@@ -658,19 +840,40 @@ const app = {
     _tabSize: 4,
     _previewOpen: false,
     _iconsTimer: null,
+    _iconRefreshQueued: false,
+    _iconRefreshRoot: null,
     selectedTemplate: 'GUI',
     _extensionsLoaded: false,
     _isExtensionProject: false,
     _extensionTestMode: false,
     _testExtId: null,
+    _isRunning: false,
     _activeUIThemeVars: [],
     _activeNormalThemeVars: [],
     _windowDragEnabled: true,
     _customSyntaxThemeId: null,
     _customSyntaxConfig: null,
     _customSyntaxColorCache: {},
+    _lastLineCount: 0,
     _uiThemesBetaDisabled: true,
     _coreButtonDefaults: {},
+    _sdkRefLoaded: false,
+    _sdkRefLoading: false,
+    _terminalInitialized: false,
+    _terminalActive: false,
+    _highlightDebounceMs: 50,
+    _minimapThrottleMs: 0,
+    _iconRefreshDelayMs: 90,
+    _lastMinimapPaintTs: 0,
+    _fpsMonitorRunning: false,
+    _fpsRafId: null,
+    _gitSelectedRepo: null,
+    _gitDashboard: null,
+    _gitOnboardingReminderShown: false,
+    _startupBootDone: false,
+    _windowDragBound: false,
+    _extensionCustomIconDataUrl: '',
+    _extensionCustomIconName: '',
 
     _settings: {},
 
@@ -691,7 +894,8 @@ const app = {
         // Defaults — will be overridden by editor-config.json when backend is ready
         this.loadThemes();
         this.toggleWindowDragLock(true);
-        this.log("DEX STUDIO v1.0.3 — Creador de Apps para Linux");
+        this.bindWindowDragBridge();
+        this.log("DEX STUDIO v1.0.4 — Creador de Apps para Linux");
         document.getElementById('breadcrumb-text').textContent = 'Inicio';
         this.applyCoreButtonOverrides();
         this.updateTopActionButtonsVisibility('home');
@@ -725,8 +929,7 @@ const app = {
             }
             if (e.ctrlKey && e.key === '`') {
                 e.preventDefault();
-                const ti = document.getElementById('terminal-input');
-                if (ti) ti.focus();
+                this.setConsoleOpen(true);
             }
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
@@ -760,37 +963,8 @@ const app = {
             appHubSearch.addEventListener('input', () => this.renderDexAppsHub());
         }
 
-        // Terminal input handler
+        // Deferred terminal + misc controls
         setTimeout(() => {
-            const termInput = document.getElementById('terminal-input');
-            if (termInput) {
-                termInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const cmd = termInput.value.trim();
-                        if (cmd) {
-                            this.execTerminalCommand(cmd);
-                            termInput.value = '';
-                        }
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        if (this.cmdHistory.length > 0) {
-                            if (this.cmdHistoryIndex < this.cmdHistory.length - 1) this.cmdHistoryIndex++;
-                            termInput.value = this.cmdHistory[this.cmdHistoryIndex] || '';
-                        }
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        if (this.cmdHistoryIndex > 0) {
-                            this.cmdHistoryIndex--;
-                            termInput.value = this.cmdHistory[this.cmdHistoryIndex] || '';
-                        } else {
-                            this.cmdHistoryIndex = -1;
-                            termInput.value = '';
-                        }
-                    }
-                });
-            }
-
             const terminalVisibleToggle = document.getElementById('terminal-visible-toggle');
             if (terminalVisibleToggle) {
                 terminalVisibleToggle.addEventListener('change', (e) => {
@@ -829,6 +1003,9 @@ const app = {
 
         var self = this;
         var initBackend = async function() {
+            if (self._startupBootDone) return;
+            if (!window.pywebview || !window.pywebview.api) return;
+            self._startupBootDone = true;
             self.log("Motor de Backend conectado");
             self._splashProgress(40, 'Cargando configuración...');
             await self.loadSettingsFromFile();
@@ -839,7 +1016,10 @@ const app = {
             // Small pause to let UI settle
             await new Promise(function(r) { setTimeout(r, 150); });
             self._splashProgress(100, 'Listo');
-            setTimeout(function() { self._hideSplash(); }, 400);
+            setTimeout(function() {
+                self._hideSplash();
+                if (self._settingsLoaded) self.checkGitOnboardingNotice();
+            }, 400);
         };
 
         window.addEventListener('pywebviewready', () => { initBackend(); });
@@ -991,6 +1171,33 @@ const app = {
         this._refreshIcons();
     },
 
+    _escapeHtmlAttr: function(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    },
+
+    _sanitizeIconId: function(name) {
+        var icon = String(name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        if (!icon) return 'puzzle';
+        if (!/^[a-z0-9_-]+$/.test(icon)) return 'puzzle';
+        return icon;
+    },
+
+    _getExtensionIconMarkup: function(ext, sizeClass) {
+        var iconData = ext && ext.icon_data_uri ? String(ext.icon_data_uri) : '';
+        var iconFile = ext && ext.icon_file ? String(ext.icon_file) : '';
+        var remoteIcon = iconFile && /^https?:\/\//i.test(iconFile) ? iconFile : '';
+        var src = iconData || remoteIcon;
+        if (src) {
+            return '<img src="' + this._escapeHtmlAttr(src) + '" class="ext-custom-icon-img ' + (sizeClass || '') + '" alt="icono">';
+        }
+        var iconVal = this._sanitizeIconId((ext && ext.icon) || 'puzzle');
+        return '<i data-lucide="' + iconVal + '"></i>';
+    },
+
     updateExtensionsView: async function() {
         var container = document.getElementById('installed-extensions');
         if (!container) return;
@@ -1051,7 +1258,7 @@ const app = {
 
             card.innerHTML =
                 '<div class="ext-v2-card-icon" style="background:' + color + (isDisabled ? ';filter:grayscale(0.6)' : '') + '">' +
-                    '<i data-lucide="' + (ext.icon || 'puzzle') + '"></i>' +
+                    self._getExtensionIconMarkup(ext, 'ext-custom-icon-sm') +
                 '</div>' +
                 '<div class="ext-v2-card-body">' +
                     '<div class="ext-v2-card-title">' + ext.name + ' <span class="ext-v2-version">v' + (ext.version || '1.0.0') + '</span></div>' +
@@ -1118,8 +1325,8 @@ const app = {
 
     // ── DEX Apps Hub ──
     _dexAppsLoaded: false,
-    _dexAppsTab: 'installed',
-    _dexAppsData: { installed_apps: [], available_debs: [] },
+    _dexAppsTab: 'store',
+    _dexAppsData: { installed_apps: [], available_debs: [], user_projects: [] },
 
     switchDexAppsTab: function(tab) {
         this._dexAppsTab = tab;
@@ -1134,10 +1341,12 @@ const app = {
                 btn.classList.add('btn-secondary');
             }
         });
+        var pStore = document.getElementById('apphub-panel-store');
+        var pCreated = document.getElementById('apphub-panel-created');
         var pInstalled = document.getElementById('apphub-panel-installed');
-        var pAvailable = document.getElementById('apphub-panel-available');
+        if (pStore) pStore.style.display = (tab === 'store') ? '' : 'none';
+        if (pCreated) pCreated.style.display = (tab === 'created') ? '' : 'none';
         if (pInstalled) pInstalled.style.display = (tab === 'installed') ? '' : 'none';
-        if (pAvailable) pAvailable.style.display = (tab === 'available') ? '' : 'none';
     },
 
     loadDexAppsHub: async function(force) {
@@ -1147,22 +1356,26 @@ const app = {
             return;
         }
         var installedList = document.getElementById('apphub-installed-list');
-        var availableList = document.getElementById('apphub-available-list');
+        var storeList = document.getElementById('apphub-store-list');
+        var createdList = document.getElementById('apphub-created-list');
         if (installedList) installedList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando apps instaladas...</p></div>';
-        if (availableList) availableList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando paquetes .deb...</p></div>';
+        if (storeList) storeList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando tienda de paquetes...</p></div>';
+        if (createdList) createdList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="loader" style="width:22px;height:22px;color:var(--accent);animation:spin 1s linear infinite"></i><p>Cargando apps creadas...</p></div>';
         this._refreshIcons();
         try {
             var res = await window.pywebview.api.get_dex_apps_hub_data();
             if (!res || !res.success) throw new Error((res && res.error) || 'No se pudo cargar Apps Hub');
             this._dexAppsData = {
                 installed_apps: Array.isArray(res.installed_apps) ? res.installed_apps : [],
-                available_debs: Array.isArray(res.available_debs) ? res.available_debs : []
+                available_debs: Array.isArray(res.available_debs) ? res.available_debs : [],
+                user_projects: Array.isArray(res.user_projects) ? res.user_projects : []
             };
             this._dexAppsLoaded = true;
             this.renderDexAppsHub();
         } catch (e) {
             if (installedList) installedList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando apps instaladas</p></div>';
-            if (availableList) availableList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando paquetes .deb</p></div>';
+            if (storeList) storeList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando tienda de paquetes</p></div>';
+            if (createdList) createdList.innerHTML = '<div class="ext-v2-empty"><i data-lucide="wifi-off" style="width:24px;height:24px;color:var(--error)"></i><p>Error cargando apps creadas</p></div>';
             this.log('Apps Hub: ' + e.message, true);
             this.showNotification('Apps Hub', 'No se pudo cargar información', 'error', 3500);
             this._refreshIcons();
@@ -1180,12 +1393,19 @@ const app = {
             var text = [item.name, item.package, item.identifier, item.description, item.version].join(' ').toLowerCase();
             return !q || text.indexOf(q) !== -1;
         });
+        var created = (this._dexAppsData.user_projects || []).filter(function(item) {
+            var text = [item.name, item.identifier, item.description, item.version, item.project_root, item.type].join(' ').toLowerCase();
+            return !q || text.indexOf(q) !== -1;
+        });
         this.renderDexInstalledApps(installed);
         this.renderDexAvailableDebs(available);
+        this.renderDexUserProjects(created);
         var c1 = document.getElementById('apphub-installed-count');
-        var c2 = document.getElementById('apphub-available-count');
+        var c2 = document.getElementById('apphub-store-count');
+        var c3 = document.getElementById('apphub-created-count');
         if (c1) c1.textContent = String(installed.length);
         if (c2) c2.textContent = String(available.length);
+        if (c3) c3.textContent = String(created.length);
         this._refreshIcons();
     },
 
@@ -1227,10 +1447,10 @@ const app = {
     },
 
     renderDexAvailableDebs: function(list) {
-        var container = document.getElementById('apphub-available-list');
+        var container = document.getElementById('apphub-store-list');
         if (!container) return;
         if (!list.length) {
-            container.innerHTML = '<div class="ext-v2-empty"><i data-lucide="file-archive" style="width:28px;height:28px;color:var(--text-tertiary)"></i><p>No se encontraron paquetes .deb en proyectos</p></div>';
+            container.innerHTML = '<div class="ext-v2-empty"><i data-lucide="store" style="width:28px;height:28px;color:var(--text-tertiary)"></i><p>No se encontraron paquetes .deb para la tienda</p></div>';
             return;
         }
         var html = '';
@@ -1282,6 +1502,52 @@ const app = {
             btn.addEventListener('click', function() {
                 var pkg = decodeURIComponent(btn.getAttribute('data-pkg') || '');
                 app.uninstallDexApp(pkg);
+            });
+        });
+    },
+
+    renderDexUserProjects: function(list) {
+        var container = document.getElementById('apphub-created-list');
+        if (!container) return;
+        if (!list.length) {
+            container.innerHTML = '<div class="ext-v2-empty"><i data-lucide="rocket" style="width:28px;height:28px;color:var(--text-tertiary)"></i><p>No se detectaron proyectos de apps creadas por el usuario</p></div>';
+            return;
+        }
+        var html = '';
+        list.forEach(function(item) {
+            var name = app.escapeHtml(item.name || 'Proyecto');
+            var ptype = app.escapeHtml(item.type || 'APP');
+            var ver = app.escapeHtml(item.version || '-');
+            var idf = app.escapeHtml(item.identifier || '-');
+            var desc = app.escapeHtml(item.description || 'Sin descripción');
+            var rootRaw = String(item.project_root || '');
+            var rootSafe = app.escapeHtml(rootRaw || '-');
+            var hasDeb = !!item.has_deb;
+            var status = hasDeb
+                ? '<span class="ext-v2-status ext-v2-status-active">Build disponible</span>'
+                : '<span class="ext-v2-status">Sin build</span>';
+            html += '<div class="ext-v2-card">' +
+                '<div class="ext-v2-card-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><i data-lucide="rocket"></i></div>' +
+                '<div class="ext-v2-card-body">' +
+                    '<div class="ext-v2-card-title">' + name + ' <span class="ext-v2-version">v' + ver + '</span></div>' +
+                    '<div class="ext-v2-card-desc">' + desc + '</div>' +
+                    '<div class="ext-v2-card-meta">Tipo: ' + ptype + ' • Firma: ' + idf + '<br>Ruta: ' + rootSafe + '</div>' +
+                '</div>' +
+                '<div class="ext-v2-card-actions">' +
+                    status +
+                    '<button class="ext-v2-btn-enable apphub-open-project-btn" data-path="' + encodeURIComponent(rootRaw) + '" data-name="' + encodeURIComponent(item.name || '') + '">' +
+                        '<i data-lucide="folder-open" style="width:12px;height:12px"></i> Abrir</button>' +
+                '</div>' +
+            '</div>';
+        });
+        container.innerHTML = html;
+        container.querySelectorAll('.apphub-open-project-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var path = decodeURIComponent(btn.getAttribute('data-path') || '');
+                var name = decodeURIComponent(btn.getAttribute('data-name') || '') || (path.split('/').pop() || 'Proyecto');
+                if (!path) return;
+                app.selectAndOpenProject(name, path);
+                app.showView('editor');
             });
         });
     },
@@ -1420,6 +1686,53 @@ const app = {
         }
     },
 
+    _setTerminalStatus: function(text) {
+        var el = document.getElementById('terminal-status');
+        if (el) el.textContent = text || 'Inactiva';
+    },
+
+    initializeTerminalIfNeeded: function() {
+        if (this._terminalInitialized) return;
+        var termInput = document.getElementById('terminal-input');
+        if (termInput) {
+            termInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.execTerminalFromInput();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (this.cmdHistory.length > 0) {
+                        if (this.cmdHistoryIndex < this.cmdHistory.length - 1) this.cmdHistoryIndex++;
+                        termInput.value = this.cmdHistory[this.cmdHistoryIndex] || '';
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (this.cmdHistoryIndex > 0) {
+                        this.cmdHistoryIndex--;
+                        termInput.value = this.cmdHistory[this.cmdHistoryIndex] || '';
+                    } else {
+                        this.cmdHistoryIndex = -1;
+                        termInput.value = '';
+                    }
+                }
+            });
+        }
+        this._terminalInitialized = true;
+        this._terminalActive = true;
+        this._setTerminalStatus('Lista');
+        this._renderTerminalTabs();
+    },
+
+    execTerminalFromInput: function() {
+        this.initializeTerminalIfNeeded();
+        var termInput = document.getElementById('terminal-input');
+        if (!termInput) return;
+        const cmd = termInput.value.trim();
+        if (!cmd) return;
+        this.execTerminalCommand(cmd);
+        termInput.value = '';
+    },
+
     clearTerminal: function() {
         document.getElementById('terminal-out').textContent = '';
     },
@@ -1432,6 +1745,7 @@ const app = {
     },
 
     execTerminalCommand: async function(cmd) {
+        this.initializeTerminalIfNeeded();
         this.cmdHistory.unshift(cmd);
         if (this.cmdHistory.length > (this.cmdHistoryLimit || 50)) this.cmdHistory.pop();
         this.cmdHistoryIndex = -1;
@@ -1467,6 +1781,7 @@ const app = {
         }
 
         try {
+            this._setTerminalStatus('Ejecutando comando...');
             const cwd = this.currentProjectPath || '~';
             const res = await window.pywebview.api.run_command('cd "' + cwd + '" 2>/dev/null; ' + cmd + ' 2>&1');
             if (res.success) {
@@ -1478,6 +1793,7 @@ const app = {
         } catch(e) {
             out.textContent += '\nError: ' + e.message;
         }
+        this._setTerminalStatus('Lista');
         out.scrollTop = out.scrollHeight;
     },
 
@@ -1503,6 +1819,7 @@ const app = {
                 'extensions': 'Extensiones',
                 'apps-hub': 'Apps Linux (DEX)',
                 'sdk-reference': 'SDK Reference',
+                'git-workspace': 'Git Workspace',
                 'settings': 'Configuración'
             };
             breadcrumbText.textContent = labels[viewId] || (viewId.charAt(0).toUpperCase() + viewId.slice(1));
@@ -1513,7 +1830,10 @@ const app = {
         navItems.forEach(item => item.classList.add('active'));
 
         if (viewId === 'apps-hub') this.loadDexAppsHub();
+        if (viewId === 'sdk-reference') this.loadSdkReference();
+        if (viewId === 'git-workspace') this.loadGitWorkspace();
         this.updateTopActionButtonsVisibility(viewId);
+        this._refreshIcons(view || document);
     },
 
     updateTopActionButtonsVisibility: function(viewId) {
@@ -1537,18 +1857,176 @@ const app = {
         if (cat === 'appearance') this.loadNormalThemes();
         if (cat === 'themes') this.loadUIThemes();
         if (cat === 'developer') this.renderDeveloperUICatalog();
+        if (cat === 'git') this.syncGitSettingsInputs();
+        if (cat === 'performance') this.syncPerformanceSettingsInputs();
         app._refreshIcons();
     },
 
+    syncPerformanceSettingsInputs: function() {
+        var low = document.getElementById('perf-lowend-toggle');
+        var hl = document.getElementById('perf-highlight-delay');
+        var mm = document.getElementById('perf-minimap-rate');
+        var ic = document.getElementById('perf-icon-delay');
+        var rm = document.getElementById('perf-reduce-motion');
+        var fps = document.getElementById('perf-fps-toggle');
+        if (low) low.checked = !!this._settings.perf_lowend_mode;
+        if (hl) hl.value = String(this._settings.perf_highlight_delay_ms || 80);
+        if (mm) mm.value = String((typeof this._settings.perf_minimap_rate_ms === 'number') ? this._settings.perf_minimap_rate_ms : 100);
+        if (ic) ic.value = String(this._settings.perf_icon_delay_ms || 90);
+        if (rm) rm.checked = !!this._settings.perf_reduce_motion;
+        if (fps) fps.checked = !!this._settings.perf_show_fps;
+    },
+
+    _applyPerformanceSettings: function() {
+        var lowend = !!this._settings.perf_lowend_mode;
+        var h = parseInt(this._settings.perf_highlight_delay_ms, 10);
+        var m = parseInt(this._settings.perf_minimap_rate_ms, 10);
+        var i = parseInt(this._settings.perf_icon_delay_ms, 10);
+
+        if (!Number.isFinite(h)) h = lowend ? 140 : 80;
+        if (!Number.isFinite(m)) m = lowend ? 220 : 100;
+        if (!Number.isFinite(i)) i = lowend ? 220 : 90;
+
+        this._highlightDebounceMs = Math.max(20, Math.min(h, 500));
+        this._minimapThrottleMs = Math.max(-1, Math.min(m, 1000));
+        this._iconRefreshDelayMs = Math.max(40, Math.min(i, 500));
+
+        var reduceMotion = !!this._settings.perf_reduce_motion || lowend;
+        document.body.classList.toggle('perf-reduce-motion', reduceMotion);
+
+        var minimap = document.getElementById('minimap-container');
+        if (minimap) {
+            if (this._minimapThrottleMs === -1) minimap.style.display = 'none';
+            else if (typeof this._settings.minimapVisible === 'boolean') minimap.style.display = this._settings.minimapVisible ? '' : 'none';
+            else minimap.style.display = '';
+        }
+
+        this.setFpsMonitor(!!this._settings.perf_show_fps);
+    },
+
+    savePerformanceSettings: function() {
+        var low = document.getElementById('perf-lowend-toggle');
+        var hl = document.getElementById('perf-highlight-delay');
+        var mm = document.getElementById('perf-minimap-rate');
+        var ic = document.getElementById('perf-icon-delay');
+        var rm = document.getElementById('perf-reduce-motion');
+        var fps = document.getElementById('perf-fps-toggle');
+
+        this._settings.perf_lowend_mode = !!(low && low.checked);
+        this._settings.perf_highlight_delay_ms = parseInt((hl && hl.value) || '80', 10);
+        this._settings.perf_minimap_rate_ms = parseInt((mm && mm.value) || '100', 10);
+        this._settings.perf_icon_delay_ms = parseInt((ic && ic.value) || '90', 10);
+        this._settings.perf_reduce_motion = !!(rm && rm.checked);
+        this._settings.perf_show_fps = !!(fps && fps.checked);
+
+        if (this._settings.perf_lowend_mode) {
+            this._settings.perf_highlight_delay_ms = 140;
+            this._settings.perf_minimap_rate_ms = 220;
+            this._settings.perf_icon_delay_ms = 220;
+            this._settings.perf_reduce_motion = true;
+            if (hl) hl.value = '140';
+            if (mm) mm.value = '220';
+            if (ic) ic.value = '220';
+            if (rm) rm.checked = true;
+        }
+
+        this._applyPerformanceSettings();
+        this.persistSettings();
+        this.showNotification('Rendimiento', 'Ajustes aplicados', 'success', 1700);
+    },
+
+    setFpsMonitor: function(enabled) {
+        var box = document.getElementById('fps-monitor');
+        if (!box) return;
+        if (!enabled) {
+            box.style.display = 'none';
+            this._fpsMonitorRunning = false;
+            if (this._fpsRafId) cancelAnimationFrame(this._fpsRafId);
+            this._fpsRafId = null;
+            return;
+        }
+
+        if (this._fpsMonitorRunning) return;
+        box.style.display = '';
+        this._fpsMonitorRunning = true;
+        var lastTs = performance.now();
+        var lastSample = lastTs;
+        var frames = 0;
+        var self = this;
+        var loop = function(ts) {
+            if (!self._fpsMonitorRunning) return;
+            frames += 1;
+            if (ts - lastSample >= 500) {
+                var elapsed = Math.max(1, ts - lastSample);
+                var fps = Math.round((frames * 1000) / elapsed);
+                var hz = Math.round(1000 / Math.max(1, ts - lastTs));
+                box.textContent = 'FPS ' + fps + ' · Hz~' + hz;
+                frames = 0;
+                lastSample = ts;
+            }
+            lastTs = ts;
+            self._fpsRafId = requestAnimationFrame(loop);
+        };
+        this._fpsRafId = requestAnimationFrame(loop);
+    },
+
+    loadSdkReference: function() {
+        var frame = document.getElementById('sdk-reference-frame');
+        var loading = document.getElementById('sdk-frame-loading');
+        if (!frame || this._sdkRefLoading) return;
+        if (this._sdkRefLoaded) {
+            this._syncSdkReferenceTheme();
+            return;
+        }
+
+        this._sdkRefLoading = true;
+        if (loading) loading.textContent = 'Cargando documentación…';
+
+        frame.onload = () => {
+            this._sdkRefLoading = false;
+            this._sdkRefLoaded = true;
+            if (loading) loading.style.display = 'none';
+            this._syncSdkReferenceTheme();
+        };
+        frame.onerror = () => {
+            this._sdkRefLoading = false;
+            if (loading) loading.textContent = 'No se pudo cargar docs/sdk-reference.html';
+        };
+
+        frame.src = 'docs/sdk-reference.html';
+    },
+
+    _syncSdkReferenceTheme: function() {
+        var frame = document.getElementById('sdk-reference-frame');
+        if (!frame || !frame.contentWindow) return;
+        try {
+            var styles = getComputedStyle(document.documentElement);
+            var payload = {
+                isLight: document.body.classList.contains('theme-light'),
+                vars: {
+                    bgBase: styles.getPropertyValue('--bg-base').trim(),
+                    bgSurface: styles.getPropertyValue('--bg-surface').trim(),
+                    bgElevated: styles.getPropertyValue('--bg-elevated').trim(),
+                    textPrimary: styles.getPropertyValue('--text-primary').trim(),
+                    textSecondary: styles.getPropertyValue('--text-secondary').trim(),
+                    border: styles.getPropertyValue('--border').trim(),
+                    accent: styles.getPropertyValue('--accent').trim()
+                }
+            };
+            frame.contentWindow.postMessage({ type: 'dex-sdk-theme', payload: payload }, '*');
+        } catch (e) {}
+    },
+
     switchSdkCat: function(cat) {
-        document.querySelectorAll('.sdk-ref-nav').forEach(function(n) {
-            n.classList.toggle('active', n.getAttribute('data-sdk-cat') === cat);
-        });
-        document.querySelectorAll('.sdk-ref-panel').forEach(function(p) {
-            p.classList.remove('active');
-        });
-        var panel = document.getElementById('sdk-panel-' + cat);
-        if (panel) panel.classList.add('active');
+        var frame = document.getElementById('sdk-reference-frame');
+        if (!frame || !frame.contentWindow) return;
+        try {
+            if (frame.contentWindow.DEXSdkRef && frame.contentWindow.DEXSdkRef.switchCat) {
+                frame.contentWindow.DEXSdkRef.switchCat(cat);
+            }
+        } catch (e) {
+            this.log('No se pudo cambiar categoría SDK: ' + e.message, true);
+        }
     },
 
     toggleWordWrap: function() {
@@ -1578,6 +2056,12 @@ const app = {
     changeTabSize: function(size) {
         this._tabSize = parseInt(size) || 4;
         this._settings.tabSize = this._tabSize;
+        this.persistSettings();
+    },
+
+    changeRunTimeout: function(value) {
+        var v = parseInt(value);
+        this._settings.runTimeout = v;
         this.persistSettings();
     },
 
@@ -1854,6 +2338,22 @@ const app = {
         this._refreshIcons();
     },
 
+    bindWindowDragBridge: function() {
+        if (this._windowDragBound) return;
+        var region = document.querySelector('.window-drag-region');
+        if (!region) return;
+        this._windowDragBound = true;
+        region.addEventListener('mousedown', function(e) {
+            if (!app._windowDragEnabled) return;
+            if (e.button !== 0) return;
+            if (e.target && e.target.closest && e.target.closest('.window-controls, .window-tools, button, input, textarea, select, a')) return;
+            try {
+                if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.window_drag_begin) return;
+                window.pywebview.api.window_drag_begin(1, Math.round(e.screenX || 0), Math.round(e.screenY || 0), Date.now());
+            } catch (_) {}
+        });
+    },
+
     createProject: async function() {
         var projType = document.getElementById('p-type').value;
         var metadata = {
@@ -1872,6 +2372,8 @@ const app = {
             metadata.ext_category = document.getElementById('p-ext-category').value;
             metadata.ext_icon = (document.getElementById('p-ext-icon').value || '').trim() || 'puzzle';
             metadata.ext_color = (document.getElementById('p-ext-color').value || '').trim() || 'linear-gradient(135deg, #667eea, #764ba2)';
+            metadata.ext_icon_data = this._extensionCustomIconDataUrl || '';
+            metadata.ext_icon_filename = this._extensionCustomIconName || '';
         }
 
         this.log(`Validando e inicializando proyecto: ${metadata.name}...`);
@@ -1906,8 +2408,67 @@ const app = {
         document.getElementById('p-ext-category').value = 'editor';
         document.getElementById('p-ext-icon').value = '';
         document.getElementById('p-ext-color').value = '';
+        this.clearExtensionIconFile(true);
         this.log('Formulario limpiado');
         this.selectTemplate('GUI');
+    },
+
+    triggerExtensionIconPicker: function() {
+        var input = document.getElementById('p-ext-icon-file');
+        if (input) input.click();
+    },
+
+    handleExtensionIconFile: function(event) {
+        var file = event && event.target && event.target.files ? event.target.files[0] : null;
+        if (!file) return;
+        var fileName = String(file.name || '');
+        var ext = (fileName.split('.').pop() || '').toLowerCase();
+        var mime = String(file.type || '').toLowerCase();
+        var allowedExt = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+        var allowedMime = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+        var extOk = allowedExt.indexOf(ext) !== -1;
+        var mimeOk = !mime || allowedMime.indexOf(mime) !== -1;
+        if (!extOk || !mimeOk) {
+            this.showNotification('Icono inválido', 'Usa PNG, JPG, JPEG, WEBP o SVG.', 'error', 3200);
+            this.clearExtensionIconFile(true);
+            return;
+        }
+        var reader = new FileReader();
+        reader.onload = () => {
+            this._extensionCustomIconDataUrl = String(reader.result || '');
+            this._extensionCustomIconName = fileName || 'icon.png';
+            var nameEl = document.getElementById('p-ext-icon-file-name');
+            if (nameEl) nameEl.textContent = this._extensionCustomIconName;
+            this.updateExtensionVisualPreview();
+        };
+        reader.readAsDataURL(file);
+    },
+
+    clearExtensionIconFile: function(silent) {
+        this._extensionCustomIconDataUrl = '';
+        this._extensionCustomIconName = '';
+        var input = document.getElementById('p-ext-icon-file');
+        if (input) input.value = '';
+        var nameEl = document.getElementById('p-ext-icon-file-name');
+        if (nameEl) nameEl.textContent = 'Ningún archivo seleccionado';
+        if (!silent) this.updateExtensionVisualPreview();
+    },
+
+    selectExtensionCategory: function(cat) {
+        var catEl = document.getElementById('p-ext-category');
+        if (!catEl) return;
+        catEl.value = cat || 'editor';
+        this.onExtensionCategoryChange(true);
+    },
+
+    _syncExtensionCategoryButtons: function() {
+        var catEl = document.getElementById('p-ext-category');
+        if (!catEl) return;
+        var current = catEl.value || 'editor';
+        document.querySelectorAll('.ext-category-btn').forEach(function(btn) {
+            var isActive = btn.getAttribute('data-ext-cat') === current;
+            btn.classList.toggle('active', isActive);
+        });
     },
 
     onExtensionCategoryChange: function(forceDefaults) {
@@ -1942,6 +2503,7 @@ const app = {
                 helpEl.innerHTML = 'Elige category <code>theme</code> para crear temas normales de color/estilo.';
             }
         }
+        this._syncExtensionCategoryButtons();
         this.updateExtensionVisualPreview();
     },
 
@@ -1969,15 +2531,21 @@ const app = {
         var iconEl = document.getElementById('p-ext-icon');
         var swatch = document.getElementById('ext-visual-preview-swatch');
         var icon = document.getElementById('ext-visual-preview-icon');
+        var iconWrap = document.getElementById('ext-visual-preview-icon-wrap');
         var iconName = document.getElementById('ext-visual-preview-icon-name');
-        if (!colorEl || !iconEl || !swatch || !icon || !iconName) return;
+        if (!colorEl || !iconEl || !swatch || !icon || !iconName || !iconWrap) return;
 
         var color = (colorEl.value || '').trim() || 'linear-gradient(135deg, #667eea, #764ba2)';
         var iconVal = (iconEl.value || '').trim() || 'puzzle';
 
         swatch.style.background = color;
-        icon.setAttribute('data-lucide', iconVal);
-        iconName.textContent = iconVal;
+        if (this._extensionCustomIconDataUrl) {
+            iconWrap.innerHTML = '<img src="' + this._extensionCustomIconDataUrl + '" class="ext-custom-icon-preview" alt="icono extensión">';
+            iconName.textContent = this._extensionCustomIconName || 'custom-icon';
+        } else {
+            iconWrap.innerHTML = '<i data-lucide="' + iconVal + '" id="ext-visual-preview-icon"></i>';
+            iconName.textContent = iconVal;
+        }
         this._refreshIcons();
     },
 
@@ -1998,6 +2566,7 @@ const app = {
         var fsConfig = document.getElementById('fs-config');
         var fgExtCategory = document.getElementById('fg-ext-category');
         var fgExtIcon = document.getElementById('fg-ext-icon');
+        var fgExtImage = document.getElementById('fg-ext-image');
         var fgExtColor = document.getElementById('fg-ext-color');
 
         if (type === 'Extension') {
@@ -2006,6 +2575,7 @@ const app = {
             if (fgIcon) fgIcon.style.display = 'none';
             if (fgExtCategory) fgExtCategory.style.display = '';
             if (fgExtIcon) fgExtIcon.style.display = '';
+            if (fgExtImage) fgExtImage.style.display = '';
             if (fgExtColor) fgExtColor.style.display = '';
             if (fsConfig) fsConfig.style.display = '';
             if (fgIdentifier) fgIdentifier.style.display = '';
@@ -2014,6 +2584,7 @@ const app = {
             if (fsConfig) fsConfig.style.display = 'none';
             if (fgExtCategory) fgExtCategory.style.display = 'none';
             if (fgExtIcon) fgExtIcon.style.display = 'none';
+            if (fgExtImage) fgExtImage.style.display = 'none';
             if (fgExtColor) fgExtColor.style.display = 'none';
         } else {
             if (fgCategory) fgCategory.style.display = '';
@@ -2021,6 +2592,7 @@ const app = {
             if (fgIcon) fgIcon.style.display = '';
             if (fgExtCategory) fgExtCategory.style.display = 'none';
             if (fgExtIcon) fgExtIcon.style.display = 'none';
+            if (fgExtImage) fgExtImage.style.display = 'none';
             if (fgExtColor) fgExtColor.style.display = 'none';
             if (fsConfig) fsConfig.style.display = '';
             if (fgIdentifier) fgIdentifier.style.display = '';
@@ -2032,29 +2604,68 @@ const app = {
 
 
     expandedFolders: {},
+    _explorerTreeCache: null,
+    _explorerTreePath: null,
 
-    refreshExplorer: async function() {
+    refreshExplorer: async function(forceReload) {
         try {
             if (!this.currentProjectPath) {
                 document.getElementById('file-list').innerHTML = '<p style="color: var(--text-dim); font-size: 0.8rem;">Abre un proyecto para ver archivos</p>';
+                this._explorerTreeCache = null;
+                this._explorerTreePath = null;
                 return;
             }
 
-            const list = document.getElementById('file-list');
-            list.innerHTML = '';
-            await this.buildTree(this.currentProjectPath, list, 0);
-            app._refreshIcons();
+            if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_project_tree !== 'function') {
+                await this.refreshExplorerLegacy();
+                return;
+            }
+
+            var shouldReload = forceReload !== false ||
+                !this._explorerTreeCache ||
+                this._explorerTreePath !== this.currentProjectPath;
+
+            if (shouldReload) {
+                const treeRes = await window.pywebview.api.get_project_tree(this.currentProjectPath, 10, 30000);
+                if (!treeRes.success || !treeRes.tree) {
+                    this.log(treeRes.error || 'No se pudo cargar el árbol del proyecto. Usando modo compatibilidad.', true);
+                    await this.refreshExplorerLegacy();
+                    return;
+                }
+                this._explorerTreeCache = treeRes.tree;
+                this._explorerTreePath = this.currentProjectPath;
+                if (treeRes.truncated) {
+                    this.log('Explorador: árbol recortado por límite de rendimiento. Ajusta estructura si hay demasiados archivos.');
+                }
+            }
+
+            this.renderExplorerTree();
         } catch(e) {
-            this.log("Error al actualizar explorador: " + e.message, true);
+            this.log("Error al actualizar explorador optimizado: " + e.message + '. Usando modo compatibilidad.', true);
+            await this.refreshExplorerLegacy();
         }
     },
 
-    buildTree: async function(dirPath, parentEl, depth) {
-        if (depth > 6) return;
+    refreshExplorerLegacy: async function() {
+        try {
+            const list = document.getElementById('file-list');
+            if (!list) return;
+            list.innerHTML = '';
+            this._explorerTreeCache = null;
+            this._explorerTreePath = null;
+            await this.buildTreeLegacy(this.currentProjectPath, list, 0);
+            this._refreshIcons(list);
+        } catch(e) {
+            this.log("Error al actualizar explorador (legacy): " + e.message, true);
+        }
+    },
+
+    buildTreeLegacy: async function(dirPath, parentEl, depth) {
+        if (depth > 10) return;
         const res = await window.pywebview.api.list_directory(dirPath);
         if (!res.success) return;
 
-        const sorted = res.items
+        const sorted = (res.items || [])
             .filter(i => !i.name.startsWith('.'))
             .sort((a, b) => {
                 if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
@@ -2062,33 +2673,156 @@ const app = {
             });
 
         for (const item of sorted) {
+            await this._appendLegacyExplorerNode(item, parentEl, depth);
+        }
+    },
+
+    _appendLegacyExplorerNode: async function(item, parentEl, depth) {
+        const isDir = !!item.is_dir;
+        const itemPath = item.path;
+        const itemName = item.name;
+        const isExpanded = !!this.expandedFolders[itemPath];
+
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        li.setAttribute('draggable', 'true');
+        li.dataset.path = itemPath;
+        li.dataset.isDir = isDir ? 'true' : 'false';
+        li.style.paddingLeft = (16 + depth * 16) + 'px';
+
+        if (isDir) {
+            li.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:12px;height:12px;flex-shrink:0;opacity:0.5"></i><i data-lucide="${isExpanded ? 'folder-open' : 'folder'}" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${itemName}</span>`;
+            li.onclick = (e) => {
+                e.stopPropagation();
+                this.toggleFolder(itemPath);
+            };
+        } else {
+            const fileIcon = this.getFileIconToken(itemName);
+            li.innerHTML = `<span style="width:12px;flex-shrink:0"></span><i data-lucide="${fileIcon}" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${itemName}</span>`;
+            li.onclick = (e) => {
+                e.stopPropagation();
+                app.openFile(itemPath);
+            };
+        }
+
+        li.addEventListener('dragstart', (e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData('text/plain', itemPath);
+            e.dataTransfer.effectAllowed = 'move';
+            li.classList.add('dragging');
+        });
+
+        li.addEventListener('dragend', () => {
+            li.classList.remove('dragging');
+            document.querySelectorAll('.drag-over, .drag-over-folder').forEach(el => {
+                el.classList.remove('drag-over', 'drag-over-folder');
+            });
+        });
+
+        li.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            document.querySelectorAll('.drag-over, .drag-over-folder').forEach(el => {
+                el.classList.remove('drag-over', 'drag-over-folder');
+            });
+            li.classList.add(isDir ? 'drag-over-folder' : 'drag-over');
+        });
+
+        li.addEventListener('dragleave', () => {
+            li.classList.remove('drag-over', 'drag-over-folder');
+        });
+
+        li.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            li.classList.remove('drag-over', 'drag-over-folder');
+            const sourcePath = e.dataTransfer.getData('text/plain');
+            if (!sourcePath || sourcePath === itemPath) return;
+            const destDir = isDir ? itemPath : itemPath.substring(0, itemPath.lastIndexOf('/'));
+            try {
+                const moveRes = await window.pywebview.api.move_item(sourcePath, destDir);
+                if (moveRes.success) {
+                    if (isDir) this.expandedFolders[itemPath] = true;
+                    await this.refreshExplorer(true);
+                } else {
+                    this.log(moveRes.error, true);
+                }
+            } catch(err) {
+                this.log('Error al mover: ' + err.message, true);
+            }
+        });
+
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            app.showContextMenu(e, itemPath, isDir);
+        };
+
+        parentEl.appendChild(li);
+
+        if (isDir && isExpanded) {
+            const childUl = document.createElement('ul');
+            childUl.className = 'file-tree-nested';
+            childUl.style.listStyle = 'none';
+            childUl.style.padding = '0';
+            childUl.style.margin = '0';
+            parentEl.appendChild(childUl);
+            await this.buildTreeLegacy(itemPath, childUl, depth + 1);
+        }
+    },
+
+    renderExplorerTree: function() {
+        const list = document.getElementById('file-list');
+        if (!list) return;
+        if (!this._explorerTreeCache || !this._explorerTreeCache.children) {
+            list.innerHTML = '<p style="color: var(--text-dim); font-size: 0.8rem;">No hay datos del explorador</p>';
+            return;
+        }
+        const frag = document.createDocumentFragment();
+        const children = this._explorerTreeCache.children || [];
+        for (const item of children) {
+            this._appendExplorerNode(item, frag, 0);
+        }
+        list.innerHTML = '';
+        list.appendChild(frag);
+        this._refreshIcons(list);
+    },
+
+    _appendExplorerNode: function(item, parentEl, depth) {
+        if (depth > 10 || !item) return;
+        const isDir = !!item.is_dir;
+        const itemPath = item.path;
+        const itemName = item.name;
+        const isExpanded = !!this.expandedFolders[itemPath];
+
+        {
             const li = document.createElement('li');
             li.className = 'file-item';
             li.setAttribute('draggable', 'true');
-            li.dataset.path = item.path;
-            li.dataset.isDir = item.is_dir ? 'true' : 'false';
+            li.dataset.path = itemPath;
+            li.dataset.isDir = isDir ? 'true' : 'false';
             li.style.paddingLeft = (16 + depth * 16) + 'px';
 
-            const isExpanded = this.expandedFolders[item.path];
-
-            if (item.is_dir) {
-                li.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:12px;height:12px;flex-shrink:0;opacity:0.5"></i><i data-lucide="${isExpanded ? 'folder-open' : 'folder'}" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${item.name}</span>`;
+            if (isDir) {
+                li.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" style="width:12px;height:12px;flex-shrink:0;opacity:0.5"></i><i data-lucide="${isExpanded ? 'folder-open' : 'folder'}" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${itemName}</span>`;
                 li.onclick = (e) => {
                     e.stopPropagation();
-                    this.toggleFolder(item.path);
+                    this.toggleFolder(itemPath);
                 };
             } else {
-                li.innerHTML = `<span style="width:12px;flex-shrink:0"></span><i data-lucide="file" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${item.name}</span>`;
+                const fileIcon = this.getFileIconToken(itemName);
+                li.innerHTML = `<span style="width:12px;flex-shrink:0"></span><i data-lucide="${fileIcon}" style="width:14px;flex-shrink:0"></i><span class="file-item-name">${itemName}</span>`;
                 li.onclick = (e) => {
                     e.stopPropagation();
-                    app.openFile(item.path);
+                    app.openFile(itemPath);
                 };
             }
 
             // Drag & Drop handlers
             li.addEventListener('dragstart', (e) => {
                 e.stopPropagation();
-                e.dataTransfer.setData('text/plain', item.path);
+                e.dataTransfer.setData('text/plain', itemPath);
                 e.dataTransfer.effectAllowed = 'move';
                 li.classList.add('dragging');
             });
@@ -2124,17 +2858,17 @@ const app = {
                 li.classList.remove('drag-over', 'drag-over-folder');
 
                 const sourcePath = e.dataTransfer.getData('text/plain');
-                if (!sourcePath || sourcePath === item.path) return;
+                if (!sourcePath || sourcePath === itemPath) return;
 
                 // Determine destination directory
-                const destDir = item.is_dir ? item.path : item.path.substring(0, item.path.lastIndexOf('/'));
+                const destDir = isDir ? itemPath : itemPath.substring(0, itemPath.lastIndexOf('/'));
 
                 try {
                     const res = await window.pywebview.api.move_item(sourcePath, destDir);
                     if (res.success) {
                         app.log('✓ Movido: ' + sourcePath.split('/').pop() + ' → ' + destDir.split('/').pop());
-                        if (item.is_dir) app.expandedFolders[item.path] = true;
-                        app.refreshExplorer();
+                        if (isDir) app.expandedFolders[itemPath] = true;
+                        app.refreshExplorer(true);
                     } else {
                         app.log(res.error, true);
                     }
@@ -2146,26 +2880,29 @@ const app = {
             li.oncontextmenu = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                app.showContextMenu(e, item.path, item.is_dir);
+                app.showContextMenu(e, itemPath, isDir);
             };
 
             parentEl.appendChild(li);
 
-            if (item.is_dir && isExpanded) {
+            if (isDir && isExpanded) {
                 const childUl = document.createElement('ul');
                 childUl.className = 'file-tree-nested';
                 childUl.style.listStyle = 'none';
                 childUl.style.padding = '0';
                 childUl.style.margin = '0';
                 parentEl.appendChild(childUl);
-                await this.buildTree(item.path, childUl, depth + 1);
+                const children = item.children || [];
+                for (const child of children) {
+                    this._appendExplorerNode(child, childUl, depth + 1);
+                }
             }
         }
     },
 
     toggleFolder: function(folderPath) {
         this.expandedFolders[folderPath] = !this.expandedFolders[folderPath];
-        this.refreshExplorer();
+        this.refreshExplorer(false);
     },
 
     showContextMenu: function(e, path, isDir) {
@@ -2181,6 +2918,41 @@ const app = {
                 menu.style.display = 'none';
             }, { once: true });
         }, 10);
+    },
+
+    importFileToFolder: async function(path, isDir) {
+        if (!this.currentProjectPath) {
+            this.log("Abre un proyecto primero", true);
+            return;
+        }
+        const targetDir = isDir ? path : this._resolveDir(path);
+        if (!targetDir) {
+            this.log("No se pudo determinar carpeta de destino", true);
+            return;
+        }
+        try {
+            const picked = await window.pywebview.api.pick_file_for_import();
+            if (!picked || !picked.success || !picked.path) {
+                if (picked && picked.error && picked.error !== 'Selección cancelada') {
+                    this.log('Importar archivo: ' + picked.error, true);
+                    this.showNotification('Importar archivo', picked.error, 'error', 3000);
+                }
+                return;
+            }
+            const res = await window.pywebview.api.import_file_to_directory(picked.path, targetDir);
+            if (!res || !res.success) {
+                this.log((res && res.error) || "No se pudo importar el archivo", true);
+                this.showNotification('Importar archivo', (res && res.error) || 'No se pudo importar el archivo', 'error', 3200);
+                return;
+            }
+            this.log('Archivo importado: ' + (res.file_name || 'archivo'));
+            this.showNotification('Importar archivo', 'Importado: ' + (res.file_name || 'archivo'), 'success', 2200);
+            await this.refreshExplorer();
+            if (res.imported_path) await this.openFile(res.imported_path);
+        } catch(e) {
+            this.log("Error al importar archivo: " + e.message, true);
+            this.showNotification('Importar archivo', e.message, 'error', 3200);
+        }
     },
 
     createFile: async function() {
@@ -2649,6 +3421,8 @@ const app = {
 
     executeRun: async function() {
         this.closeModal('run-modal');
+        this.setConsoleOpen(true, true);
+        this._setTerminalStatus('Ejecutando...');
         if (this.currentFilePath) await this.saveFile();
 
         // Check if extension project
@@ -2693,22 +3467,60 @@ const app = {
             }
         }
 
+        // Change button to cancel state
+        this._isRunning = true;
+        var btn = document.getElementById('run-btn');
+        var icon = document.getElementById('run-btn-icon');
+        var text = document.getElementById('run-btn-text');
+        if (btn) {
+            btn.style.background = 'var(--error, #ff453a)';
+            btn.style.color = '#fff';
+            btn.onclick = function() { app.cancelRun(); };
+        }
+        if (icon) icon.setAttribute('data-lucide', 'square');
+        if (text) text.textContent = 'Cancelar';
+        this._refreshIcons();
+
+        var timeout = this._settings.runTimeout;
+        if (typeof timeout === 'undefined' || timeout === null) timeout = 30;
+        if (timeout === 0) timeout = 0; // 0 = indefinido (sin límite)
+
         this.log('▶ Ejecutando: ' + interp + ' ' + mf + extraArgs);
         try {
-            var cmd = 'cd "' + this.currentProjectPath + '" && timeout 30 ' + interp + ' ' + mf + extraArgs + ' 2>&1';
-            var res = await window.pywebview.api.run_command(cmd);
+            var cmd = 'cd "' + this.currentProjectPath + '" && ' + interp + ' ' + mf + extraArgs + ' 2>&1';
+            var res = await window.pywebview.api.start_project_run(cmd, timeout);
             if (res.success) {
                 if (res.stdout) this.log(res.stdout);
                 if (res.stderr) this.log(res.stderr, true);
-                if (res.code === 0) this.log('✓ Ejecución completada');
-                else if (res.code === 124) this.log('⚠ Timeout: el proceso tardó más de 30s', true);
-                else this.log('⚠ Proceso terminó con código: ' + res.code, true);
+                if (res.timeout) {
+                    this.log('⚠ Timeout: el proceso superó el límite de ' + timeout + 's', true);
+                } else if (res.code === 0) {
+                    this.log('✓ Ejecución completada');
+                } else if (res.code < 0) {
+                    this.log('⏹ Ejecución cancelada por el usuario');
+                } else {
+                    this.log('⚠ Proceso terminó con código: ' + res.code, true);
+                }
             } else {
                 this.log(res.error || 'Error al ejecutar', true);
             }
         } catch(e) {
             this.log('Error: ' + e.message, true);
         }
+        this._setTerminalStatus('Lista');
+
+        // Restore button
+        this._isRunning = false;
+        this.updateRunButton();
+    },
+
+    cancelRun: async function() {
+        try {
+            var res = await window.pywebview.api.kill_running_process();
+            if (res.success) {
+                this.log('⏹ ' + res.message);
+            }
+        } catch(e) {}
     },
 
     isPythonRuntime: function(interpreter, mainFile) {
@@ -3099,13 +3911,18 @@ const app = {
                 var isTheme = (manifest.category === 'theme' || manifest.category === 'ui-theme' || manifest.type === 'ui-theme');
                 if (isTheme) {
                     try {
-                        if (this._uiThemesBetaDisabled) {
+                        var isUITheme = (manifest.category === 'ui-theme' || manifest.type === 'ui-theme');
+                        if (isUITheme && this._uiThemesBetaDisabled) {
                             this.log('⚠ UI Layout en beta: aplicación temporalmente desactivada');
                         } else {
                             var themeRes = await window.pywebview.api.load_ui_theme(tempId);
                             if (themeRes.success && themeRes.css) {
-                                this._applyUIThemeVarsFromCSS(themeRes.css);
-                                this.log('🎨 Tema de interfaz aplicado en modo prueba');
+                                if (isUITheme) {
+                                    this._applyUIThemeVarsFromCSS(themeRes.css);
+                                } else {
+                                    this._applyNormalThemeVarsFromCSS(themeRes.css);
+                                }
+                                this.log('🎨 Tema aplicado en modo prueba');
                             }
                         }
                     } catch(e) {}
@@ -3315,18 +4132,26 @@ const app = {
     setConsoleOpen: function(isOpen, skipPersist) {
         this.consoleOpen = !!isOpen;
         const panel = document.getElementById('bottom-panel');
-        const toggle = document.getElementById('console-toggle');
         const toggleIcon = document.getElementById('console-toggle-icon');
         const visibleToggle = document.getElementById('terminal-visible-toggle');
         
         if (!panel) return;
 
         if (this.consoleOpen) {
+            this.initializeTerminalIfNeeded();
+            this._terminalActive = true;
             panel.classList.remove('console-hidden');
             if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-down');
+            this._setTerminalStatus(this._terminalActive ? 'Lista' : 'Inactiva');
+            setTimeout(function() {
+                var ti = document.getElementById('terminal-input');
+                if (ti) ti.focus();
+            }, 0);
         } else {
+            this._terminalActive = false;
             panel.classList.add('console-hidden');
             if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-up');
+            this._setTerminalStatus('Inactiva');
         }
         if (visibleToggle) visibleToggle.checked = this.consoleOpen;
         if (!skipPersist) {
@@ -3409,6 +4234,10 @@ const app = {
                 if (res.settings.fontFamily) this.changeFontFamily(res.settings.fontFamily, true);
                 if (typeof res.settings.tabSize === 'number') this._tabSize = res.settings.tabSize;
                 if (typeof res.settings.cmdHistoryLimit === 'number') this.cmdHistoryLimit = res.settings.cmdHistoryLimit;
+                if (typeof res.settings.runTimeout === 'number') {
+                    var rtSel = document.getElementById('run-timeout');
+                    if (rtSel) rtSel.value = String(res.settings.runTimeout);
+                }
                 if (typeof res.settings.wordWrap === 'boolean') {
                     const editor = document.getElementById('code-editor');
                     const highlight = document.getElementById('code-highlight');
@@ -3423,9 +4252,8 @@ const app = {
                     var minimap = document.getElementById('minimap-container');
                     if (minimap) minimap.style.display = res.settings.minimapVisible ? '' : 'none';
                 }
-                if (typeof res.settings.consoleOpen === 'boolean') {
-                    this.setConsoleOpen(res.settings.consoleOpen, true);
-                }
+                // Terminal always starts closed to avoid background overhead on startup.
+                this.setConsoleOpen(false, true);
                 if (res.settings.recentProjects) {
                     this.renderRecentProjects(res.settings.recentProjects);
                     try { window.localStorage.setItem('recentProjects', JSON.stringify(res.settings.recentProjects)); } catch(e) {}
@@ -3449,6 +4277,9 @@ const app = {
                 if (wordWrapToggle && typeof res.settings.wordWrap === 'boolean') wordWrapToggle.checked = res.settings.wordWrap;
                 if (minimapToggle && typeof res.settings.minimapVisible === 'boolean') minimapToggle.checked = res.settings.minimapVisible;
                 if (terminalVisibleToggle && typeof this.consoleOpen === 'boolean') terminalVisibleToggle.checked = this.consoleOpen;
+                this.syncPerformanceSettingsInputs();
+                this._applyPerformanceSettings();
+                this.syncGitSettingsInputs();
 
                 if (res.settings.liteMode) {
                     document.body.classList.add('lite-mode');
@@ -3466,6 +4297,7 @@ const app = {
                         var tokenRes = await window.pywebview.api.load_github_token();
                         if (tokenRes.success && tokenRes.token) {
                             this._settings.github_token = tokenRes.token;
+                            this.syncGitSettingsInputs();
                         }
                     } catch(e) {}
                 }
@@ -3475,6 +4307,8 @@ const app = {
                     await this.restoreLastProject(res.settings.lastProject);
                 }
             }
+            this.syncPerformanceSettingsInputs();
+            this._applyPerformanceSettings();
         } catch(e) {}
     },
 
@@ -3521,6 +4355,7 @@ const app = {
                         if (!skipPersist) this.persistSettings();
                         if (!skipNotify) this.showNotification('Tema Aplicado', 'Tema normal de extensión aplicado', 'success', 1800);
                         this.updateHighlight();
+                        this._syncSdkReferenceTheme();
                         return;
                     }
                 }
@@ -3545,6 +4380,7 @@ const app = {
             document.body.classList.add('theme-' + theme);
         }
         this.uiTheme = theme;
+        this._syncSdkReferenceTheme();
     },
 
     changeEditorTheme: function(theme) {
@@ -3583,58 +4419,561 @@ const app = {
         if (!skipPersist) { this._settings.fontFamily = family; this.persistSettings(); }
     },
 
-    // Git Integration
-    initializeGitRepo: async function() {
-        if (!this.currentProjectPath) {
-            alert("Por favor abre un proyecto primero");
+    syncGitSettingsInputs: function() {
+        var tokenInput = document.getElementById('settings-git-token');
+        var nameInput = document.getElementById('settings-git-name');
+        var emailInput = document.getElementById('settings-git-email');
+        if (tokenInput) tokenInput.value = this._settings.github_token || '';
+        if (nameInput) nameInput.value = this._settings.github_name || '';
+        if (emailInput) emailInput.value = this._settings.github_email || '';
+    },
+
+    _isGitProfileComplete: function() {
+        var token = String(this._settings.github_token || '').trim();
+        var name = String(this._settings.github_name || '').trim();
+        var email = String(this._settings.github_email || '').trim();
+        return !!(token && name && email);
+    },
+
+    checkGitOnboardingNotice: function() {
+        if (!this._settingsLoaded) return;
+        if (this._isGitProfileComplete()) return;
+        var seenModal = !!this._settings.git_onboarding_modal_seen;
+        if (!seenModal) {
+            this._settings.git_onboarding_modal_seen = true;
+            this.persistSettings();
+            var modal = document.getElementById('git-onboarding-modal');
+            if (!modal) return;
+            modal.style.display = 'flex';
+            this._refreshIcons();
             return;
         }
-        this.log("Inicializando repositorio Git...");
-        const res = await window.pywebview.api.initialize_git(this.currentProjectPath);
-        if (res.success) {
-            this.log(`✓ Git inicializado: ${res.message}`);
+        if (this._gitOnboardingReminderShown) return;
+        this._gitOnboardingReminderShown = true;
+        this.showNotification(
+            'Git sin configurar',
+            'Configura token, nombre y correo en Configuración > Git para evitar errores de commit/push.',
+            'warning',
+            5200
+        );
+    },
+
+    _markGitOnboardingDeferred: function() {
+        this._settings.git_onboarding_deferred = true;
+        this.persistSettings();
+    },
+
+    closeGitOnboardingNotice: function() {
+        var modal = document.getElementById('git-onboarding-modal');
+        if (modal) modal.style.display = 'none';
+        this._markGitOnboardingDeferred();
+    },
+
+    gotoGitSettingsFromNotice: function() {
+        this._markGitOnboardingDeferred();
+        this.closeGitOnboardingNotice();
+        this.showView('settings');
+        this.switchSettingsCat('git');
+    },
+
+    saveGitProfileSettings: async function() {
+        var tokenInput = document.getElementById('settings-git-token');
+        var nameInput = document.getElementById('settings-git-name');
+        var emailInput = document.getElementById('settings-git-email');
+        var token = (tokenInput && tokenInput.value || '').trim();
+        var name = (nameInput && nameInput.value || '').trim();
+        var email = (emailInput && emailInput.value || '').trim();
+
+        this._settings.github_token = token;
+        this._settings.github_name = name;
+        this._settings.github_email = email;
+        this.persistSettings();
+
+        if (token) {
+            var tokenRes = await window.pywebview.api.save_github_token(token);
+            if (!tokenRes.success) {
+                this.log(tokenRes.error || 'No se pudo guardar token', true);
+                return;
+            }
         } else {
-            this.log(res.error, true);
+            try { await window.pywebview.api.delete_github_token(); } catch(e) {}
         }
+
+        this.showNotification('Git', 'Perfil guardado', 'success');
+        this.log('Perfil Git guardado en configuración');
+        this._syncGitProfileToWorkspaceInputs();
+        if (this._isGitProfileComplete()) {
+            this._settings.git_onboarding_completed = true;
+            this.persistSettings();
+            this.closeGitOnboardingNotice();
+        }
+    },
+
+    _syncGitProfileToWorkspaceInputs: function() {
+        var wsToken = document.getElementById('git-token-input');
+        var wsName = document.getElementById('git-user-name');
+        var wsEmail = document.getElementById('git-user-email');
+        if (wsToken && this._settings.github_token) wsToken.value = this._settings.github_token;
+        if (wsName && this._settings.github_name) wsName.value = this._settings.github_name;
+        if (wsEmail && this._settings.github_email) wsEmail.value = this._settings.github_email;
+    },
+
+    applyGitProfileToCurrentRepo: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) {
+            this.log('No hay repositorio seleccionado para aplicar identidad', true);
+            return;
+        }
+        var name = (this._settings.github_name || '').trim();
+        var email = (this._settings.github_email || '').trim();
+        if (!name || !email) {
+            this.log('Completa nombre y correo en Configuración > Git', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_set_identity(repo, name, email);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo aplicar identidad Git', true);
+            return;
+        }
+        this.showNotification('Git', 'Identidad aplicada al repositorio', 'success');
+        if (document.getElementById('view-git-workspace') && document.getElementById('view-git-workspace').classList.contains('active')) {
+            await this.gitRefreshDashboard();
+        }
+    },
+
+    // Git Workspace (visual)
+    _resolveGitRepo: function() {
+        return this._gitSelectedRepo || this.currentProjectPath || null;
+    },
+
+    loadGitWorkspace: async function() {
+        try {
+            var listEl = document.getElementById('git-repo-list');
+            if (listEl) listEl.innerHTML = '<p class="empty-state">Cargando repositorios...</p>';
+            var reposRes = await window.pywebview.api.git_list_repos();
+            if (!reposRes.success) {
+                this.log(reposRes.error || 'No se pudieron listar repositorios', true);
+                return;
+            }
+            var repos = reposRes.repos || [];
+            if (this.currentProjectPath && repos.every(function(r) { return r.path !== app.currentProjectPath; })) {
+                repos.unshift({
+                    name: this.currentProjectPath.split('/').pop(),
+                    path: this.currentProjectPath
+                });
+            }
+            if (!this._gitSelectedRepo) {
+                this._gitSelectedRepo = this.currentProjectPath || (repos[0] && repos[0].path) || null;
+            }
+            this._renderGitRepoList(repos);
+
+            try {
+                var tokenRes = await window.pywebview.api.load_github_token();
+                var tokenInput = document.getElementById('git-token-input');
+                if (!this._settings.github_token && tokenRes.success && tokenRes.token) {
+                    this._settings.github_token = tokenRes.token;
+                }
+                if (tokenInput && this._settings.github_token) tokenInput.value = this._settings.github_token;
+            } catch(e) {}
+            this._syncGitProfileToWorkspaceInputs();
+
+            if (this._gitSelectedRepo) {
+                await this.gitRefreshDashboard();
+            } else {
+                this._renderGitEmptyState();
+            }
+        } catch(e) {
+            this.log('Error cargando Git Workspace: ' + e.message, true);
+        }
+    },
+
+    _renderGitRepoList: function(repos) {
+        var listEl = document.getElementById('git-repo-list');
+        if (!listEl) return;
+        if (!repos || repos.length === 0) {
+            listEl.innerHTML = '<p class="empty-state">No hay repositorios detectados</p>';
+            return;
+        }
+        listEl.innerHTML = repos.map(function(repo) {
+            var active = repo.path === app._gitSelectedRepo ? ' active' : '';
+            return '<button class="git-repo-item' + active + '" onclick="app.gitSelectRepo(\'' + app.escapeHtml(repo.path).replace(/'/g, '&#39;') + '\')">' +
+                '<i data-lucide="folder"></i>' +
+                '<span class="git-repo-name">' + app.escapeHtml(repo.name || repo.path.split('/').pop()) + '</span>' +
+                '</button>';
+        }).join('');
+        this._refreshIcons();
+    },
+
+    _renderGitEmptyState: function() {
+        var selectedPath = document.getElementById('git-selected-path');
+        var branchName = document.getElementById('git-branch-name');
+        var changed = document.getElementById('git-count-changed');
+        var staged = document.getElementById('git-count-staged');
+        var aheadBehind = document.getElementById('git-ahead-behind');
+        var changesList = document.getElementById('git-changes-list');
+        var branchesList = document.getElementById('git-branches-list');
+        var historyList = document.getElementById('git-history-list');
+        if (selectedPath) selectedPath.textContent = 'Sin repositorio seleccionado';
+        if (branchName) branchName.textContent = '-';
+        if (changed) changed.textContent = '0';
+        if (staged) staged.textContent = '0';
+        if (aheadBehind) aheadBehind.textContent = '0 / 0';
+        if (changesList) changesList.innerHTML = '<p class="empty-state">Selecciona o crea un repositorio para empezar</p>';
+        if (branchesList) branchesList.innerHTML = '<p class="empty-state">Sin branches</p>';
+        if (historyList) historyList.innerHTML = '<p class="empty-state">Sin commits</p>';
+    },
+
+    gitSelectRepo: async function(path) {
+        this._gitSelectedRepo = path;
+        await this.loadGitWorkspace();
+    },
+
+    gitRefreshDashboard: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) {
+            this._renderGitEmptyState();
+            return;
+        }
+        var dash = await window.pywebview.api.git_dashboard(repo);
+        if (!dash.success) {
+            this._gitDashboard = null;
+            this.log(dash.error || 'No se pudo obtener estado Git', true);
+            this._renderGitEmptyState();
+            return;
+        }
+        this._gitDashboard = dash;
+        this._renderGitDashboard(dash);
+    },
+
+    _renderGitDashboard: function(dash) {
+        var status = dash.status || {};
+        var selectedPath = document.getElementById('git-selected-path');
+        var branchName = document.getElementById('git-branch-name');
+        var changed = document.getElementById('git-count-changed');
+        var staged = document.getElementById('git-count-staged');
+        var aheadBehind = document.getElementById('git-ahead-behind');
+        var changesList = document.getElementById('git-changes-list');
+        var branchesList = document.getElementById('git-branches-list');
+        var historyList = document.getElementById('git-history-list');
+        var remoteInput = document.getElementById('git-remote-url');
+        var nameInput = document.getElementById('git-user-name');
+        var emailInput = document.getElementById('git-user-email');
+
+        if (selectedPath) selectedPath.textContent = status.repo_root || this._gitSelectedRepo || '-';
+        if (branchName) branchName.textContent = status.branch || dash.current_branch || 'HEAD';
+        if (changed) changed.textContent = String(status.changed_count || 0);
+        if (staged) staged.textContent = String(status.staged_count || 0);
+        if (aheadBehind) aheadBehind.textContent = (status.ahead || 0) + ' / ' + (status.behind || 0);
+
+        if (remoteInput) {
+            var origin = (status.remotes || []).find(function(r) { return r.name === 'origin'; });
+            if (origin && origin.url) remoteInput.value = origin.url;
+        }
+
+        if (nameInput && dash.identity && dash.identity.name !== undefined) nameInput.value = dash.identity.name || '';
+        if (emailInput && dash.identity && dash.identity.email !== undefined) emailInput.value = dash.identity.email || '';
+
+        if (changesList) {
+            var files = status.changed_files || [];
+            if (!files.length) {
+                changesList.innerHTML = '<p class="empty-state">Working tree limpio</p>';
+            } else {
+                changesList.innerHTML = files.map(function(f) {
+                    var stagedFlag = f.staged ? '<span class="git-pill git-pill-staged">staged</span>' : '<span class="git-pill">unstaged</span>';
+                    var statusText = (f.index_status || ' ') + (f.worktree_status || ' ');
+                    var actions = f.staged
+                        ? '<button class="btn-secondary btn-sm" onclick="app.gitUnstageFile(\'' + app.escapeHtml(f.path).replace(/'/g, '&#39;') + '\')">Unstage</button>'
+                        : '<button class="btn-secondary btn-sm" onclick="app.gitStageFile(\'' + app.escapeHtml(f.path).replace(/'/g, '&#39;') + '\')">Stage</button>';
+                    return '<div class="git-change-item">' +
+                        '<div class="git-change-main">' +
+                        '<code class="git-status-code">' + app.escapeHtml(statusText) + '</code>' +
+                        '<span class="git-change-path">' + app.escapeHtml(f.path) + '</span>' +
+                        stagedFlag +
+                        '</div>' +
+                        '<div class="git-change-actions">' +
+                        actions +
+                        '<button class="btn-secondary btn-sm" onclick="app.gitDiscardFile(\'' + app.escapeHtml(f.path).replace(/'/g, '&#39;') + '\')">Descartar</button>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+
+        if (branchesList) {
+            var branches = dash.branches || [];
+            if (!branches.length) {
+                branchesList.innerHTML = '<p class="empty-state">Sin branches</p>';
+            } else {
+                branchesList.innerHTML = branches.map(function(b) {
+                    var current = b.current ? ' active' : '';
+                    return '<button class="git-branch-item' + current + '" onclick="app.gitCheckoutBranch(\'' + app.escapeHtml(b.name).replace(/'/g, '&#39;') + '\')">' +
+                        '<i data-lucide="git-branch"></i><span>' + app.escapeHtml(b.name) + '</span>' +
+                        (b.current ? '<span class="git-pill git-pill-current">actual</span>' : '') +
+                        '</button>';
+                }).join('');
+            }
+        }
+
+        if (historyList) {
+            var commits = dash.commits || [];
+            if (!commits.length) {
+                historyList.innerHTML = '<p class="empty-state">Sin historial</p>';
+            } else {
+                historyList.innerHTML = commits.map(function(c) {
+                    return '<div class="git-history-item">' +
+                        '<div><strong>' + app.escapeHtml(c.subject || '') + '</strong></div>' +
+                        '<div class="git-history-meta">' + app.escapeHtml(c.hash || '') + ' · ' + app.escapeHtml(c.author || '') + ' · ' + app.escapeHtml(c.date || '') + '</div>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+
+        this._refreshIcons();
+    },
+
+    gitInitCurrentRepo: async function() {
+        if (!this.currentProjectPath) {
+            this.log('Abre un proyecto para inicializar Git', true);
+            return;
+        }
+        var res = await window.pywebview.api.initialize_git(this.currentProjectPath);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo inicializar Git', true);
+            return;
+        }
+        if (this._settings.github_name && this._settings.github_email) {
+            await window.pywebview.api.git_set_identity(
+                this.currentProjectPath,
+                String(this._settings.github_name).trim(),
+                String(this._settings.github_email).trim()
+            );
+        }
+        this._gitSelectedRepo = this.currentProjectPath;
+        this.showNotification('Git', 'Repositorio inicializado', 'success');
+        await this.loadGitWorkspace();
+    },
+
+    gitCloneRepo: async function() {
+        var input = document.getElementById('git-clone-url');
+        var url = (input && input.value || '').trim();
+        if (!url) {
+            this.log('Escribe una URL para clonar', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_clone_repo(url);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo clonar el repositorio', true);
+            return;
+        }
+        this._gitSelectedRepo = res.path || null;
+        this.showNotification('Git', 'Repositorio clonado', 'success');
+        if (input) input.value = '';
+        await this.loadGitWorkspace();
+    },
+
+    gitCreateLocalRepo: async function() {
+        var input = document.getElementById('git-create-name');
+        var name = (input && input.value || '').trim();
+        if (!name) {
+            this.log('Escribe un nombre para crear el repositorio', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_create_repo(name);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo crear el repositorio', true);
+            return;
+        }
+        this._gitSelectedRepo = res.path || null;
+        this.showNotification('Git', 'Repositorio creado', 'success');
+        if (this._settings.github_name && this._settings.github_email && this._gitSelectedRepo) {
+            await window.pywebview.api.git_set_identity(
+                this._gitSelectedRepo,
+                String(this._settings.github_name).trim(),
+                String(this._settings.github_email).trim()
+            );
+        }
+        if (input) input.value = '';
+        await this.loadGitWorkspace();
+    },
+
+    gitStageFile: async function(path) {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var res = await window.pywebview.api.git_stage(repo, [path]);
+        if (!res.success) this.log(res.error || 'No se pudo stage', true);
+        await this.gitRefreshDashboard();
+    },
+
+    gitUnstageFile: async function(path) {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var res = await window.pywebview.api.git_unstage(repo, [path]);
+        if (!res.success) this.log(res.error || 'No se pudo unstage', true);
+        await this.gitRefreshDashboard();
+    },
+
+    gitDiscardFile: async function(path) {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        if (!confirm('Descartar cambios de ' + path + '?')) return;
+        var res = await window.pywebview.api.git_discard(repo, [path]);
+        if (!res.success) this.log(res.error || 'No se pudo descartar', true);
+        await this.gitRefreshDashboard();
+    },
+
+    gitStageAll: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var res = await window.pywebview.api.git_stage(repo, ['.']);
+        if (!res.success) this.log(res.error || 'No se pudo stage all', true);
+        await this.gitRefreshDashboard();
+    },
+
+    gitCommitChanges: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var input = document.getElementById('git-commit-message');
+        var message = (input && input.value || '').trim();
+        if (!message) {
+            this.log('Escribe un mensaje de commit', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_commit(repo, message);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo crear commit', true);
+            return;
+        }
+        if (input) input.value = '';
+        this.showNotification('Git', 'Commit creado', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitSaveIdentity: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var name = (document.getElementById('git-user-name') || {}).value || '';
+        var email = (document.getElementById('git-user-email') || {}).value || '';
+        this._settings.github_name = name.trim();
+        this._settings.github_email = email.trim();
+        this.persistSettings();
+        this.syncGitSettingsInputs();
+        var res = await window.pywebview.api.git_set_identity(repo, name.trim(), email.trim());
+        if (!res.success) {
+            this.log(res.error || 'No se pudo guardar identidad', true);
+            return;
+        }
+        this.showNotification('Git', 'Identidad actualizada', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitCheckoutBranch: async function(branch) {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var res = await window.pywebview.api.git_checkout_branch(repo, branch);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo cambiar de branch', true);
+            return;
+        }
+        await this.gitRefreshDashboard();
+    },
+
+    gitCreateBranch: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var input = document.getElementById('git-new-branch');
+        var branch = (input && input.value || '').trim();
+        if (!branch) {
+            this.log('Escribe el nombre de la branch', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_create_branch(repo, branch, true);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo crear branch', true);
+            return;
+        }
+        if (input) input.value = '';
+        await this.gitRefreshDashboard();
+    },
+
+    gitSetRemoteOrigin: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var url = (document.getElementById('git-remote-url') || {}).value || '';
+        if (!url.trim()) {
+            this.log('Escribe la URL del remote', true);
+            return;
+        }
+        var res = await window.pywebview.api.git_set_remote(repo, url.trim(), 'origin');
+        if (!res.success) {
+            this.log(res.error || 'No se pudo configurar remote', true);
+            return;
+        }
+        this.showNotification('Git', 'Remote origin actualizado', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitPullRepo: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var branch = (this._gitDashboard && this._gitDashboard.current_branch) || null;
+        var res = await window.pywebview.api.git_pull(repo, 'origin', branch);
+        if (!res.success) {
+            this.log(res.error || 'Pull falló', true);
+            return;
+        }
+        this.showNotification('Git', 'Pull completado', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitPushRepo: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var tokenInput = document.getElementById('git-token-input');
+        var token = (tokenInput && tokenInput.value || this._settings.github_token || '').trim() || null;
+        var name = (this._settings.github_name || '').trim();
+        var email = (this._settings.github_email || '').trim();
+        if (name && email) {
+            await window.pywebview.api.git_set_identity(repo, name, email);
+        }
+        var branch = (this._gitDashboard && this._gitDashboard.current_branch) || null;
+        var res = await window.pywebview.api.git_push(repo, 'origin', branch, token);
+        if (!res.success) {
+            this.log(res.error || 'Push falló', true);
+            return;
+        }
+        this.showNotification('Git', 'Push completado', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitSaveToken: async function() {
+        var tokenInput = document.getElementById('git-token-input');
+        var token = (tokenInput && tokenInput.value || '').trim();
+        if (!token) {
+            this.log('Token vacío', true);
+            return;
+        }
+        this._settings.github_token = token;
+        this.persistSettings();
+        this.syncGitSettingsInputs();
+        var res = await window.pywebview.api.save_github_token(token);
+        if (!res.success) {
+            this.log(res.error || 'No se pudo guardar token', true);
+            return;
+        }
+        this.showNotification('Git', 'Token guardado', 'success');
+    },
+
+    // Compatibilidad con acciones antiguas
+    initializeGitRepo: async function() {
+        await this.gitInitCurrentRepo();
     },
 
     connectGitHub: function() {
-        const token = prompt("Introduce tu token de acceso de GitHub:\n(Crea uno en https://github.com/settings/tokens con scope 'repo')");
-        if (token) {
-            this._settings.github_token = token;
-            this.persistSettings();
-            // Also save to ~/.dex-studio/ for persistence across reinstalls
-            window.pywebview.api.save_github_token(token);
-            this.log("✓ Token de GitHub guardado de forma segura");
-            this.showNotification('Token Guardado', 'Tu token de GitHub se ha guardado de forma segura', 'success');
-        }
+        this.showView('git-workspace');
     },
 
     pushToGithub: async function() {
-        if (!this.currentProjectPath) {
-            this.log("Por favor abre un proyecto primero", true);
-            return;
-        }
-        
-        const repoUrl = prompt("URL del repositorio de GitHub (ej: https://github.com/usuario/repo.git)");
-        if (!repoUrl) return;
-
-        this.log("Subiendo a GitHub...");
-        let token = this._settings.github_token || null;
-        if (!token) {
-            try {
-                var tokenRes = await window.pywebview.api.load_github_token();
-                if (tokenRes.success && tokenRes.token) token = tokenRes.token;
-            } catch(e) {}
-        }
-        
-        const res = await window.pywebview.api.push_to_github(this.currentProjectPath, repoUrl, token);
-        
-        if (res.success) {
-            this.log("Proyecto subido: " + res.message);
-        } else {
-            this.log(res.error || "Error al subir", true);
-        }
+        this.showView('git-workspace');
     },
 
     showHelp: function() {
@@ -3666,11 +5005,33 @@ const app = {
         } catch(e) {}
     },
 
-    _refreshIcons: function() {
+    _refreshIcons: function(root) {
+        var targetRoot = (root && root.nodeType === 1) ? root : document;
+        if (this._iconRefreshQueued) {
+            if (!this._iconRefreshRoot) {
+                this._iconRefreshRoot = targetRoot;
+            } else if (this._iconRefreshRoot !== targetRoot) {
+                this._iconRefreshRoot = document;
+            }
+            return;
+        }
+        this._iconRefreshRoot = targetRoot;
+        this._iconRefreshQueued = true;
+        var self = this;
         if (this._iconsTimer) clearTimeout(this._iconsTimer);
+        var delay = this._iconRefreshDelayMs || 90;
         this._iconsTimer = setTimeout(function() {
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        }, 30);
+            requestAnimationFrame(function() {
+                try {
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons({ root: self._iconRefreshRoot || document });
+                    }
+                } finally {
+                    self._iconRefreshQueued = false;
+                    self._iconRefreshRoot = null;
+                }
+            });
+        }, delay);
     },
 
     clearRecentProjects: function() {
@@ -3699,8 +5060,7 @@ const app = {
     },
 
     showGitMenu: function() {
-        document.getElementById('git-modal').style.display = 'flex';
-        app._refreshIcons();
+        this.showView('git-workspace');
     },
 
     openEditorRepo: function() {
@@ -3751,14 +5111,7 @@ const app = {
     },
 
     importFromGit: function() {
-        const url = prompt('URL del repositorio a clonar:\n(Ej: https://github.com/usuario/repo.git)');
-        if (!url) return;
-        this.log('Clonando repositorio...');
-        window.pywebview.api.run_command('cd "' + this.currentProjectPath + '/.." && git clone "' + url + '" 2>&1').then(res => {
-            if (res.success && res.stdout) this.log(res.stdout);
-            if (res.success && res.stderr) this.log(res.stderr);
-            if (!res.success) this.log(res.error || 'Error al clonar', true);
-        });
+        this.showView('git-workspace');
     },
 
     openExtRepo: async function() {
@@ -3871,7 +5224,7 @@ const app = {
 
             card.innerHTML =
                 '<div class="ext-v2-card-icon" style="background:' + color + '">' +
-                    '<i data-lucide="' + (ext.icon || 'puzzle') + '"></i>' +
+                    self._getExtensionIconMarkup(ext, 'ext-custom-icon-sm') +
                 '</div>' +
                 '<div class="ext-v2-card-body">' +
                     '<div class="ext-v2-card-title">' + (ext.name || ext.id) + ' <span class="ext-v2-version">v' + (ext.version || '1.0.0') + '</span></div>' +
@@ -3940,7 +5293,7 @@ const app = {
         // Header con icono grande
         var iconEl = document.getElementById('ext-detail-icon');
         iconEl.style.background = ext.color || 'linear-gradient(135deg, #667eea, #764ba2)';
-        iconEl.innerHTML = '<i data-lucide="' + (ext.icon || 'puzzle') + '"></i>';
+        iconEl.innerHTML = this._getExtensionIconMarkup(ext, 'ext-custom-icon-lg');
 
         document.getElementById('ext-detail-name').textContent = ext.name || ext.id;
 
@@ -4184,6 +5537,32 @@ const app = {
 
     // ─── Syntax Highlighting Engine ───
     _hlLang: 'text',
+
+    getFileIconToken: function(fileName) {
+        if (!fileName) return 'file';
+        var lower = String(fileName).toLowerCase();
+        var ext = lower.includes('.') ? lower.split('.').pop() : '';
+
+        if (lower === 'dockerfile' || lower === 'containerfile') return 'docker';
+        if (lower === '.gitignore' || lower.startsWith('.git')) return 'git';
+        if (lower === 'package.json' || lower === 'package-lock.json') return 'npm';
+        if (lower === 'requirements.txt' || lower === 'pyproject.toml') return 'python';
+        if (lower === 'readme.md' || lower === 'readme') return 'markdown';
+
+        var map = {
+            html: 'html', htm: 'html', css: 'css',
+            js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+            ts: 'typescript', tsx: 'typescript',
+            py: 'python', java: 'java', c: 'c', h: 'c',
+            cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+            cs: 'csharp', go: 'go', rs: 'rust', php: 'php',
+            rb: 'ruby', lua: 'lua', sh: 'bash', bash: 'bash',
+            ps1: 'powershell', json: 'json', yaml: 'yaml', yml: 'yaml',
+            toml: 'toml', xml: 'xml', md: 'markdown', markdown: 'markdown',
+            sql: 'sql', vue: 'vue', svelte: 'svelte', jsx: 'react'
+        };
+        return map[ext] || 'file';
+    },
 
     detectLanguage: function(filePath) {
         if (!filePath) return 'text';
@@ -4632,13 +6011,14 @@ const app = {
         highlight.innerHTML = html + '\n';
         highlight.scrollTop = editor.scrollTop;
         highlight.scrollLeft = editor.scrollLeft;
+        this.updateLineNumbers();
     },
 
     updateHighlightDebounced: function() {
         if (this._liteModeHL) return;
         if (this._hlTimer) clearTimeout(this._hlTimer);
         var self = this;
-        this._hlTimer = setTimeout(function() { self.updateHighlight(); }, 50);
+        this._hlTimer = setTimeout(function() { self.updateHighlight(); }, this._highlightDebounceMs || 50);
     },
 
     setupEditorHighlighting: function() {
@@ -4650,10 +6030,13 @@ const app = {
         editor.addEventListener('input', function() {
             self.updateHighlightDebounced();
             self.updateMinimap();
+            self.updateLineNumbers();
         });
         editor.addEventListener('scroll', function() {
             highlight.scrollTop = editor.scrollTop;
             highlight.scrollLeft = editor.scrollLeft;
+            var gutter = document.getElementById('line-numbers');
+            if (gutter) gutter.scrollTop = editor.scrollTop;
             self.updateMinimap();
         });
         editor.addEventListener('click', function() { self.updateLnCol(); });
@@ -4688,6 +6071,24 @@ const app = {
                 editor.selectionStart = editor.selectionEnd = start + tabSize;
                 self.updateHighlight();
             }
+        });
+        editor.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            var menu = document.getElementById('editor-context-menu');
+            if (!menu) return;
+            menu.style.display = 'block';
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+            // Ensure menu doesn't go off-screen
+            var rect = menu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+            if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+            setTimeout(function() {
+                document.addEventListener('click', function() {
+                    menu.style.display = 'none';
+                }, { once: true });
+            }, 10);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         });
     },
 
@@ -4842,6 +6243,144 @@ const app = {
         this.log('Reemplazados todos: "' + query + '" → "' + replacement + '"');
     },
 
+    updateLineNumbers: function() {
+        var editor = document.getElementById('code-editor');
+        var gutter = document.getElementById('line-numbers');
+        if (!editor || !gutter) return;
+        var lineCount = (editor.value.match(/\n/g) || []).length + 1;
+        if (this._lastLineCount === lineCount) return;
+        this._lastLineCount = lineCount;
+        var nums = [];
+        for (var i = 1; i <= lineCount; i++) nums.push(i);
+        gutter.textContent = nums.join('\n');
+    },
+
+    editorContextAction: function(action) {
+        var editor = document.getElementById('code-editor');
+        var menu = document.getElementById('editor-context-menu');
+        if (menu) menu.style.display = 'none';
+        if (!editor) return;
+        editor.focus();
+
+        switch(action) {
+            case 'undo':
+                document.execCommand('undo');
+                this.updateHighlight();
+                break;
+            case 'redo':
+                document.execCommand('redo');
+                this.updateHighlight();
+                break;
+            case 'cut':
+                document.execCommand('cut');
+                this.updateHighlight();
+                break;
+            case 'copy':
+                document.execCommand('copy');
+                break;
+            case 'paste':
+                navigator.clipboard.readText().then(function(text) {
+                    var start = editor.selectionStart;
+                    var end = editor.selectionEnd;
+                    editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+                    editor.selectionStart = editor.selectionEnd = start + text.length;
+                    app.updateHighlight();
+                    app.updateLineNumbers();
+                }).catch(function() {
+                    document.execCommand('paste');
+                    app.updateHighlight();
+                });
+                break;
+            case 'selectAll':
+                editor.select();
+                break;
+            case 'comment':
+                this.toggleComment();
+                break;
+            case 'duplicate':
+                this.duplicateLine();
+                break;
+            case 'find':
+                this.showSearchReplace();
+                break;
+        }
+    },
+
+    toggleComment: function() {
+        var editor = document.getElementById('code-editor');
+        if (!editor) return;
+        var lang = this._hlLang || 'text';
+        var prefix = '#';
+        if (['javascript', 'css', 'java', 'c', 'cpp', 'go', 'rust', 'typescript', 'json'].indexOf(lang) !== -1) prefix = '//';
+        if (lang === 'html' || lang === 'xml') { this.toggleBlockComment(editor, '<!--', '-->'); return; }
+        if (lang === 'css') { this.toggleBlockComment(editor, '/*', '*/'); return; }
+
+        var val = editor.value;
+        var start = editor.selectionStart;
+        var end = editor.selectionEnd;
+        var lineStart = val.lastIndexOf('\n', start - 1) + 1;
+        var lineEnd = val.indexOf('\n', end);
+        if (lineEnd === -1) lineEnd = val.length;
+        var selectedLines = val.substring(lineStart, lineEnd);
+        var lines = selectedLines.split('\n');
+        var allCommented = lines.every(function(l) { return l.trimStart().indexOf(prefix + ' ') === 0 || l.trimStart().indexOf(prefix) === 0 || l.trim() === ''; });
+
+        var newLines;
+        if (allCommented) {
+            newLines = lines.map(function(l) {
+                var re = new RegExp('^(\\s*)' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' ?');
+                return l.replace(re, '$1');
+            });
+        } else {
+            newLines = lines.map(function(l) {
+                if (l.trim() === '') return l;
+                return l.replace(/^(\s*)/, '$1' + prefix + ' ');
+            });
+        }
+
+        var newText = newLines.join('\n');
+        editor.value = val.substring(0, lineStart) + newText + val.substring(lineEnd);
+        editor.selectionStart = lineStart;
+        editor.selectionEnd = lineStart + newText.length;
+        this.updateHighlight();
+        this.updateLineNumbers();
+    },
+
+    toggleBlockComment: function(editor, openTag, closeTag) {
+        var val = editor.value;
+        var start = editor.selectionStart;
+        var end = editor.selectionEnd;
+        var selected = val.substring(start, end);
+        if (selected.indexOf(openTag) === 0 && selected.lastIndexOf(closeTag) === selected.length - closeTag.length) {
+            var uncommented = selected.substring(openTag.length, selected.length - closeTag.length).trim();
+            editor.value = val.substring(0, start) + uncommented + val.substring(end);
+            editor.selectionStart = start;
+            editor.selectionEnd = start + uncommented.length;
+        } else {
+            var commented = openTag + ' ' + selected + ' ' + closeTag;
+            editor.value = val.substring(0, start) + commented + val.substring(end);
+            editor.selectionStart = start;
+            editor.selectionEnd = start + commented.length;
+        }
+        this.updateHighlight();
+        this.updateLineNumbers();
+    },
+
+    duplicateLine: function() {
+        var editor = document.getElementById('code-editor');
+        if (!editor) return;
+        var val = editor.value;
+        var pos = editor.selectionStart;
+        var lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+        var lineEnd = val.indexOf('\n', pos);
+        if (lineEnd === -1) lineEnd = val.length;
+        var line = val.substring(lineStart, lineEnd);
+        editor.value = val.substring(0, lineEnd) + '\n' + line + val.substring(lineEnd);
+        editor.selectionStart = editor.selectionEnd = lineEnd + 1 + line.length;
+        this.updateHighlight();
+        this.updateLineNumbers();
+    },
+
     // ─── Ln/Col Indicator ───
     updateLnCol: function() {
         var el = document.getElementById('code-editor');
@@ -4874,6 +6413,7 @@ const app = {
             this._liteModeHL = false;
             this.updateHighlight();
         }
+        this._applyPerformanceSettings();
         this.log(isLite ? '⚡ Modo Rendimiento activado (picom desactivado, highlighting off)' : '✓ Modo normal restaurado (picom activado)');
     },
 
@@ -4916,19 +6456,28 @@ const app = {
         var self = this;
         container.innerHTML = '';
         this._terminals.forEach(function(t, i) {
+            var wrap = document.createElement('div');
+            wrap.className = 'terminal-tab-wrap';
+
             var tab = document.createElement('button');
             tab.className = 'terminal-tab' + (t.id === self._activeTerminal ? ' active' : '');
-            tab.innerHTML = 'Terminal ' + (i + 1) +
-                (self._terminals.length > 1 ? ' <button class="term-close" onclick="event.stopPropagation();app.closeTerminal(' + t.id + ')">×</button>' : '');
+            tab.textContent = 'Terminal ' + (i + 1);
             tab.onclick = function() { self.switchTerminal(t.id); };
-            container.appendChild(tab);
+            wrap.appendChild(tab);
+
+            if (self._terminals.length > 1) {
+                var closeBtn = document.createElement('button');
+                closeBtn.className = 'term-close';
+                closeBtn.textContent = '×';
+                closeBtn.title = 'Cerrar terminal';
+                closeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    self.closeTerminal(t.id);
+                };
+                wrap.appendChild(closeBtn);
+            }
+            container.appendChild(wrap);
         });
-        var addBtn = document.createElement('button');
-        addBtn.className = 'terminal-tab-add';
-        addBtn.textContent = '+';
-        addBtn.title = 'Nueva terminal';
-        addBtn.onclick = function() { self.addTerminal(); };
-        container.appendChild(addBtn);
     },
 
     // ─── Minimap ───
@@ -4937,6 +6486,10 @@ const app = {
         var canvas = document.getElementById('minimap-canvas');
         var viewport = document.getElementById('minimap-viewport');
         if (!editor || !canvas || !viewport) return;
+        if (this._minimapThrottleMs === -1) return;
+        var now = Date.now();
+        if (this._minimapThrottleMs > 0 && (now - (this._lastMinimapPaintTs || 0)) < this._minimapThrottleMs) return;
+        this._lastMinimapPaintTs = now;
         var ctx = canvas.getContext('2d');
         var lines = editor.value.split('\n');
         canvas.width = 60;

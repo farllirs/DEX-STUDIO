@@ -8,6 +8,7 @@
 // Extensions are loaded automatically from ~/.dex-studio/extensions/{id}/
 // Each extension must call DEX.registerExtension() with a config object
 // and a handlers object. The file MUST end with "// Dex code successful".
+// You can also set "icon_file" in manifest.json to use a custom PNG/SVG icon.
 //
 // ============================================================================
 

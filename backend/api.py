@@ -6,22 +6,27 @@ import re
 import base64
 import ast
 import time
+import signal
 import sys
 import glob
 import urllib.error
 from datetime import datetime, timedelta
 from backend.packager import Packager
 from backend.extensions_db import ExtensionsDB
+from backend.git_service import GitService
 
 class API:
     def __init__(self):
         # Keep window reference private so pywebview js_api introspection ignores it.
         self._window = None
+        self._gtk_window = None
         self._window_maximized = False
         self.current_project_path = None
         self.projects_root = os.path.join(os.path.expanduser("~"), 'DEX_Projects')
         os.makedirs(self.projects_root, exist_ok=True)
         self.ext_db = ExtensionsDB()
+        self.git_service = GitService()
+        self._running_process = None
         self._migrate_modules_to_extensions()
 
     def _migrate_modules_to_extensions(self):
@@ -41,6 +46,9 @@ class API:
 
     def set_window(self, window):
         self._window = window
+
+    def set_gtk_window(self, gtk_window):
+        self._gtk_window = gtk_window
 
     def toggle_devtools(self):
         if self._window:
@@ -79,6 +87,25 @@ class API:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def window_drag_begin(self, button=1, x_root=0, y_root=0, timestamp=None):
+        """Start native window drag for frameless mode (GTK)."""
+        try:
+            if self._gtk_window is None:
+                return {'success': False, 'error': 'Drag nativo no disponible en este backend'}
+            btn = int(button or 1)
+            x = int(float(x_root or 0))
+            y = int(float(y_root or 0))
+            if timestamp is None:
+                ts = int(time.time() * 1000)
+            else:
+                ts = int(float(timestamp))
+            # GDK event time is guint32.
+            ts = ts & 0xFFFFFFFF
+            self._gtk_window.begin_move_drag(btn, x, y, ts)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def get_home_dir(self):
         return os.path.expanduser("~")
 
@@ -96,6 +123,81 @@ class API:
                     'is_dir': os.path.isdir(full_path)
                 })
             return {'success': True, 'items': items}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_project_tree(self, path, max_depth=8, max_nodes=20000):
+        """Build a project tree in one backend call to avoid N directory scans from UI."""
+        try:
+            root = os.path.realpath(os.path.expanduser(path))
+            if not os.path.isdir(root):
+                return {'success': False, 'error': 'Ruta de proyecto inválida'}
+
+            try:
+                depth_limit = max(1, min(int(max_depth), 32))
+            except Exception:
+                depth_limit = 8
+            try:
+                node_limit = max(500, min(int(max_nodes), 100000))
+            except Exception:
+                node_limit = 20000
+
+            counter = {'count': 0}
+            truncated = {'value': False}
+
+            def build_node(dir_path, depth):
+                if depth > depth_limit or truncated['value']:
+                    return []
+                entries = []
+                try:
+                    with os.scandir(dir_path) as it:
+                        for entry in it:
+                            name = entry.name
+                            if name.startswith('.'):
+                                continue
+                            try:
+                                is_dir = entry.is_dir(follow_symlinks=False)
+                            except Exception:
+                                continue
+                            entries.append({
+                                'name': name,
+                                'path': os.path.realpath(entry.path),
+                                'is_dir': is_dir
+                            })
+                except Exception:
+                    return []
+
+                entries.sort(key=lambda i: (0 if i['is_dir'] else 1, i['name'].lower()))
+
+                out = []
+                for item in entries:
+                    counter['count'] += 1
+                    if counter['count'] > node_limit:
+                        truncated['value'] = True
+                        break
+                    node = {
+                        'name': item['name'],
+                        'path': item['path'],
+                        'is_dir': item['is_dir']
+                    }
+                    if item['is_dir']:
+                        node['children'] = build_node(item['path'], depth + 1)
+                    out.append(node)
+                return out
+
+            tree = {
+                'name': os.path.basename(root),
+                'path': root,
+                'is_dir': True,
+                'children': build_node(root, 0)
+            }
+            return {
+                'success': True,
+                'tree': tree,
+                'truncated': truncated['value'],
+                'max_depth': depth_limit,
+                'max_nodes': node_limit
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -189,6 +291,7 @@ class API:
             template_type = metadata.get('type', 'GUI')
             template_map = {'GUI': 'gui', 'CLI': 'cli', 'Web': 'web', 'Extension': 'extension'}
             template_name = template_map.get(template_type)
+            extension_icon_file = ''
 
             if template_type == 'Extension':
                 # Extensions: just create project dir, no src/assets/icons/build
@@ -223,6 +326,39 @@ class API:
             # Copy template files
             template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', template_name)
 
+            if template_type == 'Extension':
+                icon_data = str(metadata.get('ext_icon_data') or '').strip()
+                icon_name = str(metadata.get('ext_icon_filename') or '').strip()
+                if icon_data.startswith('data:') and ',' in icon_data:
+                    header, b64_payload = icon_data.split(',', 1)
+                    header_l = header.lower()
+                    mime = header_l.split(';', 1)[0].replace('data:', '').strip()
+                    guessed = os.path.splitext(icon_name)[1].lower() if icon_name else ''
+                    if guessed == '.jpeg':
+                        guessed = '.jpg'
+
+                    mime_to_ext = {
+                        'image/png': '.png',
+                        'image/jpeg': '.jpg',
+                        'image/jpg': '.jpg',
+                        'image/webp': '.webp',
+                        'image/svg+xml': '.svg',
+                        'image/svg': '.svg'
+                    }
+                    ext = mime_to_ext.get(mime, '.png')
+                    if guessed in ('.png', '.jpg', '.webp', '.svg'):
+                        ext = guessed
+
+                    # Accept icon when either MIME or extension is valid.
+                    mime_ok = mime in mime_to_ext
+                    ext_ok = guessed in ('.png', '.jpg', '.webp', '.svg')
+                    if mime_ok or ext_ok:
+                        extension_icon_file = f'icon{ext}'
+                        icon_target = os.path.join(base_path, extension_icon_file)
+                        with open(icon_target, 'wb') as f:
+                            f.write(base64.b64decode(b64_payload))
+                        metadata['ext_icon_file'] = extension_icon_file
+
             placeholders = {
                 '{{APP_NAME}}': metadata['name'],
                 '{{CREATOR}}': metadata['creator'],
@@ -231,7 +367,8 @@ class API:
                 '{{IDENTIFIER}}': metadata['identifier'],
                 '{{EXT_CATEGORY}}': metadata.get('ext_category', 'editor'),
                 '{{EXT_ICON}}': metadata.get('ext_icon', 'puzzle'),
-                '{{EXT_COLOR}}': metadata.get('ext_color', 'linear-gradient(135deg, #667eea, #764ba2)')
+                '{{EXT_COLOR}}': metadata.get('ext_color', 'linear-gradient(135deg, #667eea, #764ba2)'),
+                '{{EXT_ICON_FILE}}': metadata.get('ext_icon_file', extension_icon_file)
             }
 
             if os.path.exists(template_dir):
@@ -251,6 +388,9 @@ class API:
                                 f.write(content)
                         except (UnicodeDecodeError, Exception):
                             shutil.copy2(src_file, dst_file)
+
+            metadata.pop('ext_icon_data', None)
+            metadata.pop('ext_icon_filename', None)
 
             # Write metadata.json for Extension/Blank type too
             if template_type in ('Extension', 'Blank'):
@@ -315,6 +455,45 @@ class API:
             cwd = self.current_project_path or os.getcwd()
             result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=cwd)
             return {'success': True, 'stdout': result.stdout, 'stderr': result.stderr, 'code': result.returncode}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def start_project_run(self, command, timeout=0):
+        """Run a project command as a subprocess that can be cancelled."""
+        try:
+            cwd = self.current_project_path or os.getcwd()
+            self._running_process = subprocess.Popen(
+                command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, cwd=cwd, preexec_fn=os.setsid
+            )
+            try:
+                timeout_val = float(timeout) if timeout and float(timeout) > 0 else None
+                stdout, stderr = self._running_process.communicate(timeout=timeout_val)
+                code = self._running_process.returncode
+                self._running_process = None
+                return {'success': True, 'stdout': stdout, 'stderr': stderr, 'code': code}
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(self._running_process.pid), signal.SIGTERM)
+                    self._running_process.wait(timeout=5)
+                except Exception:
+                    pass
+                self._running_process = None
+                return {'success': True, 'stdout': '', 'stderr': '', 'code': 124, 'timeout': True}
+        except Exception as e:
+            self._running_process = None
+            return {'success': False, 'error': str(e)}
+
+    def kill_running_process(self):
+        """Kill the currently running project process."""
+        try:
+            if self._running_process and self._running_process.poll() is None:
+                os.killpg(os.getpgid(self._running_process.pid), signal.SIGTERM)
+                return {'success': True, 'message': 'Proceso cancelado'}
+            return {'success': False, 'error': 'No hay proceso en ejecución'}
+        except ProcessLookupError:
+            self._running_process = None
+            return {'success': True, 'message': 'Proceso ya terminado'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -500,54 +679,139 @@ class API:
             return {'success': False, 'error': 'No hay un proyecto abierto para compilar.'}
         return Packager.create_deb(self.current_project_path)
 
+    def _resolve_git_repo_path(self, repo_path=None):
+        candidate = repo_path or self.current_project_path
+        return os.path.expanduser(candidate) if candidate else None
+
     def initialize_git(self, project_path):
-        try:
-            cwd = os.path.expanduser(project_path)
-            result = subprocess.run(['git', 'init'], capture_output=True, text=True, cwd=cwd)
-            if result.returncode == 0:
-                # Create .gitignore
-                gitignore_path = os.path.join(cwd, '.gitignore')
-                with open(gitignore_path, 'w') as f:
-                    f.write('build/\n__pycache__/\n*.pyc\n.DS_Store\n')
-                return {'success': True, 'message': 'Repositorio Git inicializado'}
-            return {'success': False, 'error': result.stderr}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        repo_path = self._resolve_git_repo_path(project_path)
+        if not repo_path:
+            return {'success': False, 'error': 'No hay un proyecto abierto'}
+        return self.git_service.init_repo(
+            repo_path,
+            name='DEX Developer',
+            email='dexstudio@localhost'
+        )
 
     def push_to_github(self, project_path, repo_url, token=None):
         try:
-            cwd = os.path.expanduser(project_path)
-            
-            # Configure Git user if needed
-            subprocess.run(['git', 'config', 'user.email', 'dexstudio@localhost'], cwd=cwd, capture_output=True)
-            subprocess.run(['git', 'config', 'user.name', 'DEX Developer'], cwd=cwd, capture_output=True)
-            
-            # Add all files
-            subprocess.run(['git', 'add', '.'], cwd=cwd, capture_output=True, text=True)
-            
-            # Initial commit
-            commit_result = subprocess.run(['git', 'commit', '-m', 'Initial commit from DEX STUDIO'], 
-                                         cwd=cwd, capture_output=True, text=True)
-            
-            # Add remote
-            subprocess.run(['git', 'remote', 'remove', 'origin'], cwd=cwd, capture_output=True)
-            subprocess.run(['git', 'remote', 'add', 'origin', repo_url], cwd=cwd, capture_output=True, text=True)
-            
-            # Push to GitHub
-            if token:
-                url_with_token = repo_url.replace('https://', f'https://{token}@')
-                push_result = subprocess.run(['git', 'push', '-u', 'origin', 'master'], 
-                                           cwd=cwd, capture_output=True, text=True)
-            else:
-                push_result = subprocess.run(['git', 'push', '-u', 'origin', 'master'], 
-                                           cwd=cwd, capture_output=True, text=True)
-            
-            if push_result.returncode == 0:
-                return {'success': True, 'message': 'Proyecto subido a GitHub correctamente'}
-            else:
-                return {'success': False, 'error': push_result.stderr}
+            repo_path = self._resolve_git_repo_path(project_path)
+            if not repo_path:
+                return {'success': False, 'error': 'No hay un proyecto abierto'}
+
+            init_res = self.git_service.init_repo(
+                repo_path,
+                name='DEX Developer',
+                email='dexstudio@localhost'
+            )
+            if not init_res.get('success'):
+                return init_res
+
+            stage_res = self.git_service.stage(repo_path, ['.'])
+            if not stage_res.get('success'):
+                return stage_res
+
+            self.git_service.commit(repo_path, 'Initial commit from DEX STUDIO')
+
+            remote_res = self.git_service.set_remote(repo_path, repo_url, 'origin')
+            if not remote_res.get('success'):
+                return remote_res
+
+            status_res = self.git_service.status(repo_path)
+            current_branch = status_res.get('branch') if status_res.get('success') else None
+            push_res = self.git_service.push(repo_path, 'origin', current_branch, token)
+            if not push_res.get('success'):
+                return push_res
+            return {'success': True, 'message': 'Proyecto subido a GitHub correctamente'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def git_dashboard(self, repo_path=None):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.dashboard(repo)
+
+    def git_list_repos(self, root_path=None):
+        return self.git_service.list_repos(root_path or self.projects_root)
+
+    def git_clone_repo(self, repo_url, destination_root=None, folder_name=None):
+        return self.git_service.clone_repo(repo_url, destination_root or self.projects_root, folder_name)
+
+    def git_create_repo(self, name, root_path=None):
+        return self.git_service.create_repo(name, root_path or self.projects_root, init_readme=True)
+
+    def git_set_identity(self, repo_path, name=None, email=None):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.set_identity(repo, name, email)
+
+    def git_stage(self, repo_path, paths):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.stage(repo, paths)
+
+    def git_unstage(self, repo_path, paths):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.unstage(repo, paths)
+
+    def git_discard(self, repo_path, paths):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.discard(repo, paths)
+
+    def git_commit(self, repo_path, message):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.commit(repo, message)
+
+    def git_branches(self, repo_path):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.branches(repo)
+
+    def git_checkout_branch(self, repo_path, branch):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.checkout_branch(repo, branch)
+
+    def git_create_branch(self, repo_path, branch, checkout=True):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.create_branch(repo, branch, checkout)
+
+    def git_set_remote(self, repo_path, repo_url, remote='origin'):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.set_remote(repo, repo_url, remote)
+
+    def git_push(self, repo_path, remote='origin', branch=None, token=None):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.push(repo, remote, branch, token)
+
+    def git_pull(self, repo_path, remote='origin', branch=None):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.pull(repo, remote, branch)
+
+    def git_log(self, repo_path, limit=25):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.log(repo, limit)
 
     def list_modules(self):
         try:
@@ -972,6 +1236,21 @@ class API:
                 except:
                     pass
 
+            # Download custom icon file if declared in manifest and not part of files list
+            icon_file = manifest.get('icon_file')
+            if icon_file and icon_file not in extra_files:
+                try:
+                    icon_url = f'https://raw.githubusercontent.com/farllirs/DEX-EXTENSIONS/main/extensions/{ext_id}/{icon_file}'
+                    req = urllib.request.Request(icon_url, headers={'User-Agent': 'DEX-STUDIO/1.0'})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        icon_bytes = response.read()
+                    icon_path = os.path.join(ext_dir, icon_file)
+                    os.makedirs(os.path.dirname(icon_path), exist_ok=True)
+                    with open(icon_path, 'wb') as f:
+                        f.write(icon_bytes)
+                except:
+                    pass
+
             # For theme/ui-theme extensions, try downloading theme.css even if not listed in manifest.files
             try:
                 if manifest.get('category') in ('theme', 'ui-theme') or manifest.get('type') == 'ui-theme':
@@ -993,6 +1272,7 @@ class API:
                 'author': manifest.get('author', ''),
                 'category': manifest.get('category', 'editor'),
                 'icon': manifest.get('icon', 'puzzle'),
+                'icon_file': manifest.get('icon_file', ''),
                 'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)')
             })
             return {'success': True, 'message': f'Extensión "{manifest.get("name", ext_id)}" instalada correctamente'}
@@ -1037,11 +1317,30 @@ class API:
             if not os.path.exists(modules_dir):
                 return {'success': True, 'extensions': []}
             result = []
+            mime_map = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.svg': 'image/svg+xml',
+                '.webp': 'image/webp'
+            }
             for item in sorted(os.listdir(modules_dir)):
                 ext_dir = os.path.join(modules_dir, item)
                 if not os.path.isdir(ext_dir):
                     continue
-                ext_info = {'id': item, 'name': item, 'version': '1.0.0', 'description': '', 'author': '', 'category': 'editor', 'icon': 'puzzle', 'color': '#667eea', 'installed': True}
+                ext_info = {
+                    'id': item,
+                    'name': item,
+                    'version': '1.0.0',
+                    'description': '',
+                    'author': '',
+                    'category': 'editor',
+                    'icon': 'puzzle',
+                    'icon_file': '',
+                    'icon_data_uri': '',
+                    'color': '#667eea',
+                    'installed': True
+                }
                 # Leer manifest.json si existe
                 manifest_path = os.path.join(ext_dir, 'manifest.json')
                 if os.path.exists(manifest_path):
@@ -1055,8 +1354,19 @@ class API:
                             'author': manifest.get('author', ''),
                             'category': manifest.get('category', 'editor'),
                             'icon': manifest.get('icon', 'puzzle'),
+                            'icon_file': manifest.get('icon_file', ''),
                             'color': manifest.get('color', '#667eea')
                         })
+                        icon_file = manifest.get('icon_file', '')
+                        if icon_file:
+                            icon_path = os.path.realpath(os.path.join(ext_dir, icon_file))
+                            if icon_path.startswith(os.path.realpath(ext_dir)) and os.path.exists(icon_path):
+                                icon_ext = os.path.splitext(icon_path)[1].lower()
+                                mime = mime_map.get(icon_ext)
+                                if mime:
+                                    with open(icon_path, 'rb') as iconf:
+                                        data = base64.b64encode(iconf.read()).decode('utf-8')
+                                    ext_info['icon_data_uri'] = f'data:{mime};base64,{data}'
                     except Exception:
                         pass
                 # Enriquecer con datos de la DB
@@ -1212,7 +1522,11 @@ class API:
 
             def upload_file(file_path_in_repo, content_str):
                 url = f'https://api.github.com/repos/{repo}/contents/{file_path_in_repo}'
-                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                if isinstance(content_str, bytes):
+                    raw = content_str
+                else:
+                    raw = content_str.encode('utf-8')
+                encoded = base64.b64encode(raw).decode('utf-8')
                 sha = None
                 try:
                     req = urllib.request.Request(url, headers=headers)
@@ -1253,6 +1567,16 @@ class API:
                     theme_css_content = f.read()
                 upload_file(f'extensions/{ext_id}/theme.css', theme_css_content)
 
+            # Upload custom icon file when present
+            icon_file = manifest.get('icon_file')
+            if icon_file:
+                icon_path = os.path.realpath(os.path.join(self.current_project_path, icon_file))
+                project_root = os.path.realpath(self.current_project_path)
+                if icon_path.startswith(project_root) and os.path.exists(icon_path):
+                    with open(icon_path, 'rb') as f:
+                        icon_bytes = f.read()
+                    upload_file(f'extensions/{ext_id}/{icon_file}', icon_bytes)
+
             registry_url = f'https://api.github.com/repos/{repo}/contents/registry.json'
             req = urllib.request.Request(registry_url, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -1271,6 +1595,7 @@ class API:
                 'author': manifest.get('author', ''),
                 'category': manifest.get('category', 'editor'),
                 'icon': manifest.get('icon', 'puzzle'),
+                'icon_file': manifest.get('icon_file', ''),
                 'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)')
             }
             found = False
@@ -1391,7 +1716,11 @@ class API:
 
             def upload_file_to_repo(file_path_in_repo, content_str):
                 url = f'https://api.github.com/repos/{owner}/{repo}/contents/{file_path_in_repo}'
-                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                if isinstance(content_str, bytes):
+                    raw = content_str
+                else:
+                    raw = content_str.encode('utf-8')
+                encoded = base64.b64encode(raw).decode('utf-8')
                 sha = None
                 try:
                     req = urllib.request.Request(url, headers=headers)
@@ -1420,10 +1749,10 @@ class API:
                     full_path = os.path.join(root, fname)
                     rel_path = os.path.relpath(full_path, self.current_project_path)
                     try:
-                        with open(full_path, 'r', encoding='utf-8') as f:
+                        with open(full_path, 'rb') as f:
                             file_content = f.read()
                         upload_file_to_repo(rel_path, file_content)
-                    except (UnicodeDecodeError, Exception):
+                    except Exception:
                         pass
 
             # Build entry for registry/DB
@@ -1435,6 +1764,7 @@ class API:
                 'author': manifest.get('author', ''),
                 'category': manifest.get('category', 'editor'),
                 'icon': manifest.get('icon', 'puzzle'),
+                'icon_file': manifest.get('icon_file', ''),
                 'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
                 'repo_url': repo_url
             }
@@ -1631,6 +1961,7 @@ class API:
                 'author': manifest.get('author', ''),
                 'category': manifest.get('category', 'editor'),
                 'icon': manifest.get('icon', 'puzzle'),
+                'icon_file': manifest.get('icon_file', ''),
                 'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
                 'repo_url': repo_url
             })
@@ -1733,7 +2064,11 @@ class API:
 
             def upload_file_to_repo(file_path_in_repo, content_str):
                 url = f'https://api.github.com/repos/{owner}/{repo}/contents/{file_path_in_repo}'
-                encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
+                if isinstance(content_str, bytes):
+                    raw = content_str
+                else:
+                    raw = content_str.encode('utf-8')
+                encoded = base64.b64encode(raw).decode('utf-8')
                 sha = None
                 try:
                     req = urllib.request.Request(url, headers=headers)
@@ -1762,10 +2097,10 @@ class API:
                     full_path = os.path.join(root, fname)
                     rel_path = os.path.relpath(full_path, self.current_project_path)
                     try:
-                        with open(full_path, 'r', encoding='utf-8') as f:
+                        with open(full_path, 'rb') as f:
                             file_content = f.read()
                         upload_file_to_repo(rel_path, file_content)
-                    except (UnicodeDecodeError, Exception):
+                    except Exception:
                         pass
 
             # Build entry for registry/DB
@@ -1777,6 +2112,7 @@ class API:
                 'author': manifest.get('author', ''),
                 'category': manifest.get('category', 'editor'),
                 'icon': manifest.get('icon', 'puzzle'),
+                'icon_file': manifest.get('icon_file', ''),
                 'color': manifest.get('color', 'linear-gradient(135deg, #667eea, #764ba2)'),
                 'repo_url': repo_url
             }
@@ -2086,6 +2422,88 @@ class API:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def pick_file_for_import(self):
+        """Open a native file picker and return selected file path."""
+        try:
+            # Primary path: pywebview native dialog (works inside the app window).
+            if self._window is not None and hasattr(self._window, 'create_file_dialog'):
+                try:
+                    import webview
+                    picked = self._window.create_file_dialog(
+                        webview.OPEN_DIALOG,
+                        allow_multiple=False
+                    )
+                    if picked:
+                        path = picked[0] if isinstance(picked, (list, tuple)) else picked
+                        if path and os.path.isfile(path):
+                            return {'success': True, 'path': os.path.realpath(path)}
+                except Exception:
+                    pass
+
+            # Prefer external pickers when available.
+            for cmd in (
+                ['zenity', '--file-selection', '--title=Importar archivo a DEX STUDIO'],
+                ['kdialog', '--getopenfilename', os.path.expanduser('~')],
+                ['yad', '--file', '--title=Importar archivo a DEX STUDIO']
+            ):
+                try:
+                    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    if proc.returncode == 0:
+                        picked = (proc.stdout or '').strip()
+                        if picked and os.path.isfile(picked):
+                            return {'success': True, 'path': os.path.realpath(picked)}
+                except Exception:
+                    pass
+
+            # Fallback: tkinter dialog.
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                picked = filedialog.askopenfilename(initialdir=os.path.expanduser('~'))
+                root.destroy()
+                if picked and os.path.isfile(picked):
+                    return {'success': True, 'path': os.path.realpath(picked)}
+            except Exception:
+                pass
+
+            return {'success': False, 'error': 'Selección cancelada'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def import_file_to_directory(self, source_file, dest_dir):
+        """Import an external file into a project directory."""
+        try:
+            src = os.path.realpath(os.path.expanduser(source_file or ''))
+            dst_dir = os.path.realpath(os.path.expanduser(dest_dir or ''))
+            if not src or not os.path.isfile(src):
+                return {'success': False, 'error': 'Archivo origen no válido'}
+            if not dst_dir or not os.path.isdir(dst_dir):
+                return {'success': False, 'error': 'Directorio destino no válido'}
+
+            # Restrict destination to current project for safety.
+            project_root = os.path.realpath(self.current_project_path or '')
+            if not project_root or not dst_dir.startswith(project_root):
+                return {'success': False, 'error': 'Destino fuera del proyecto actual'}
+
+            base = os.path.basename(src)
+            dest = os.path.join(dst_dir, base)
+            if os.path.exists(dest):
+                name, ext = os.path.splitext(base)
+                ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+                dest = os.path.join(dst_dir, f'{name}-{ts}{ext}')
+
+            shutil.copy2(src, dest)
+            return {
+                'success': True,
+                'imported_path': dest,
+                'file_name': os.path.basename(dest)
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def file_exists(self, path):
         """Check if a file or directory exists"""
         try:
@@ -2235,7 +2653,85 @@ class API:
                     })
 
             available_debs = sorted(available_debs, key=lambda x: ((x.get('name') or '').lower(), (x.get('version') or '')))
-            return {'success': True, 'installed_apps': installed_apps, 'available_debs': available_debs}
+            installed_by_identifier = set((a.get('identifier') or '').strip() for a in installed_apps if a.get('identifier'))
+            user_projects = []
+            seen_projects = set()
+            seen_roots = set()
+            for root in project_roots:
+                root_real = os.path.realpath(os.path.expanduser(root))
+                if root_real in seen_roots:
+                    continue
+                seen_roots.add(root_real)
+                if not os.path.isdir(root_real):
+                    continue
+                try:
+                    for entry in os.scandir(root_real):
+                        if not entry.is_dir():
+                            continue
+                        project_root = os.path.realpath(entry.path)
+                        if project_root in seen_projects:
+                            continue
+                        seen_projects.add(project_root)
+
+                        metadata_path = os.path.join(project_root, 'metadata.json')
+                        if not os.path.isfile(metadata_path):
+                            continue
+                        try:
+                            with open(metadata_path, 'r', encoding='utf-8') as f:
+                                meta = json.load(f)
+                        except Exception:
+                            continue
+                        if not isinstance(meta, dict):
+                            continue
+
+                        project_type = str(meta.get('type') or 'GUI').strip()
+                        if project_type in ('Extension', 'Blank'):
+                            continue
+
+                        identifier = str(meta.get('identifier') or '').strip()
+                        build_glob = os.path.join(project_root, 'build', '*.deb')
+                        debs = glob.glob(build_glob)
+                        latest_deb = ''
+                        package_name = ''
+                        if debs:
+                            try:
+                                latest_deb = max(debs, key=lambda p: os.path.getmtime(p))
+                            except Exception:
+                                latest_deb = debs[0]
+                            fields = self._deb_fields(latest_deb)
+                            package_name = (fields.get('package') or '').strip()
+
+                        installed = False
+                        if package_name:
+                            installed = self._dpkg_installed(package_name)
+                        elif identifier:
+                            installed = identifier in installed_by_identifier
+
+                        user_projects.append({
+                            'name': (meta.get('name') or os.path.basename(project_root)),
+                            'identifier': identifier or 'unknown',
+                            'description': meta.get('description', ''),
+                            'version': meta.get('version', ''),
+                            'type': project_type,
+                            'creator': meta.get('creator', ''),
+                            'category': meta.get('category', ''),
+                            'project_root': project_root,
+                            'has_deb': bool(debs),
+                            'deb_count': len(debs),
+                            'latest_deb': latest_deb,
+                            'package': package_name,
+                            'installed': installed
+                        })
+                except Exception:
+                    continue
+
+            user_projects = sorted(user_projects, key=lambda x: (x.get('name') or '').lower())
+            return {
+                'success': True,
+                'installed_apps': installed_apps,
+                'available_debs': available_debs,
+                'user_projects': user_projects
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -2373,15 +2869,10 @@ class API:
 
     def git_diff(self, path=None):
         """Get git diff for current project or specific file"""
-        try:
-            cwd = self.current_project_path or os.getcwd()
-            cmd = ['git', 'diff']
-            if path:
-                cmd.extend(['--', path])
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
-            return {'success': True, 'diff': result.stdout}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        repo = self._resolve_git_repo_path(None)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.diff(repo, path)
 
     def duplicate_item(self, path):
         """Duplicate a file or folder"""

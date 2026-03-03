@@ -6,5 +6,6 @@
     "author": "{{CREATOR}}",
     "category": "{{EXT_CATEGORY}}",
     "icon": "{{EXT_ICON}}",
+    "icon_file": "{{EXT_ICON_FILE}}",
     "color": "{{EXT_COLOR}}"
 }

@@ -28,6 +28,18 @@ cd DEX-STUDIO
 bash install.sh
 ```
 
+### Opción 1.1: instalar desde `.deb` con install.sh
+
+```bash
+bash install.sh --deb /ruta/dex-studio_1.0.4.deb
+```
+
+### Opción 1.2: construir `.deb` e instalar en un solo comando
+
+```bash
+bash install.sh --build-deb
+```
+
 ### Opción 2: desde código fuente
 
 ```bash
@@ -40,7 +52,7 @@ python3 main.py
 ### Opción 3: paquete `.deb`
 
 ```bash
-sudo dpkg -i dex-studio_1.0.3.deb
+sudo dpkg -i dex-studio_1.0.4.deb
 sudo apt-get install -f -y
 dex-studio
 ```

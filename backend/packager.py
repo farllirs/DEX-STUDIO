@@ -33,7 +33,12 @@ class Packager:
             app_dir = os.path.join(build_root, 'usr', 'share', name)
             os.makedirs(app_dir, exist_ok=True)
             os.makedirs(os.path.join(build_root, 'usr', 'share', 'applications'), exist_ok=True)
-            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', 'scalable', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', '256x256', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', '128x128', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', '64x64', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', '48x48', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'icons', 'hicolor', '32x32', 'apps'), exist_ok=True)
+            os.makedirs(os.path.join(build_root, 'usr', 'share', 'pixmaps'), exist_ok=True)
             
             # Determine dependencies
             depends = 'python3'
@@ -53,6 +58,18 @@ class Packager:
             )
             with open(os.path.join(build_root, 'DEBIAN', 'control'), 'w') as f:
                 f.write(control)
+            postinst = (
+                "#!/bin/sh\n"
+                "set -e\n"
+                "update-desktop-database /usr/share/applications >/dev/null 2>&1 || true\n"
+                "gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true\n"
+                "xdg-desktop-menu forceupdate >/dev/null 2>&1 || true\n"
+                "exit 0\n"
+            )
+            postinst_path = os.path.join(build_root, 'DEBIAN', 'postinst')
+            with open(postinst_path, 'w') as f:
+                f.write(postinst)
+            os.chmod(postinst_path, 0o755)
             
             # Determine if terminal app
             use_terminal = 'true' if app_type == 'CLI' else 'false'
@@ -87,8 +104,11 @@ class Packager:
             ]
             for icon_src in icon_candidates:
                 if os.path.exists(icon_src):
+                    for size in ('256x256', '128x128', '64x64', '48x48', '32x32'):
+                        shutil.copy2(icon_src, os.path.join(
+                            build_root, 'usr', 'share', 'icons', 'hicolor', size, 'apps', f'{name}.png'))
                     shutil.copy2(icon_src, os.path.join(
-                        build_root, 'usr', 'share', 'icons', 'hicolor', 'scalable', 'apps', f'{name}.png'))
+                        build_root, 'usr', 'share', 'pixmaps', f'{name}.png'))
                     break
             
             # Desktop file

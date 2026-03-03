@@ -24,6 +24,11 @@ mkdir -p "$BUILD_DIR/DEBIAN"
 mkdir -p "$BUILD_DIR/usr/share/$APP_NAME"
 mkdir -p "$BUILD_DIR/usr/share/applications"
 mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/128x128/apps"
+mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/64x64/apps"
+mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/48x48/apps"
+mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/32x32/apps"
+mkdir -p "$BUILD_DIR/usr/share/pixmaps"
 mkdir -p "$BUILD_DIR/usr/bin"
 
 # ── DEBIAN/control ──
@@ -41,6 +46,17 @@ Description: IDE y creador de aplicaciones para Linux
  HTML, CSS y JavaScript.
 EOF
 
+# ── DEBIAN/postinst ──
+cat > "$BUILD_DIR/DEBIAN/postinst" << 'EOF'
+#!/bin/sh
+set -e
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
+exit 0
+EOF
+chmod 755 "$BUILD_DIR/DEBIAN/postinst"
+
 # ── Copiar archivos de la aplicación ──
 echo "Copiando archivos..."
 cp -r "$BASE_DIR/backend" "$BUILD_DIR/usr/share/$APP_NAME/"
@@ -54,6 +70,11 @@ cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/$APP_NAME/"
 
 # ── Icono ──
 cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
+cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/icons/hicolor/128x128/apps/$APP_NAME.png"
+cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/icons/hicolor/64x64/apps/$APP_NAME.png"
+cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/icons/hicolor/48x48/apps/$APP_NAME.png"
+cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/icons/hicolor/32x32/apps/$APP_NAME.png"
+cp "$BASE_DIR/dex-icon.png" "$BUILD_DIR/usr/share/pixmaps/$APP_NAME.png"
 
 # ── Wrapper ejecutable ──
 cat > "$BUILD_DIR/usr/bin/$APP_NAME" << 'WRAPPER'

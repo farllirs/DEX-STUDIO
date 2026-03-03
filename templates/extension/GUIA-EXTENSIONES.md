@@ -34,6 +34,7 @@ mi-extension/
 | `author`      | ✅ | Nombre del creador. |
 | `category`    | ✅ | Categoría: `editor`, `tools`, `language`, `theme`, `ui-theme`, `productivity`, `debug` |
 | `icon`        | ❌ | Nombre de ícono Lucide (ej: `puzzle`, `palette`, `zap`). Default: `puzzle` |
+| `icon_file`   | ❌ | Ruta local dentro de la extensión (ej: `icon.png`) para usar icono personalizado PNG/SVG/JPG. |
 | `color`       | ❌ | Gradiente CSS para la tarjeta del Marketplace. |
 | `type`        | ❌ | Usar `"ui-theme"` para temas de interfaz completa. |
 | `colors`      | ❌ | Objeto con colores de preview: `{ "background": "#1e1e2e", "accent": "#89b4fa" }` |

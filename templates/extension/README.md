@@ -34,7 +34,7 @@
 ```
 
 ### Key files
-- **manifest.json** — Defines id, name, version, category, icon, and color. Must have a unique `id` that matches the folder name.
+- **manifest.json** — Defines id, name, version, category, icon, `icon_file` (optional custom PNG/SVG), and color. Must have a unique `id` that matches the folder name.
 - **extension.dex.js** — Contains the `DEX.registerExtension()` call with config and handlers. Must end with `// Dex code successful`.
 - **theme.css** — (Optional) CSS variables for UI theme extensions. Only needed if `category` is `"theme"` or `type` is `"ui-theme"`.
 

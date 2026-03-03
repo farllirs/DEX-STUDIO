@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## v1.0.4 (Stable)
+
+### Lo que agregué
+- Reorganicé `Apps Linux (DEX)` en formato tienda con tres vistas: `Tienda`, `Mis Apps` e `Instaladas`.
+- Añadí detección de apps creadas por el usuario (`metadata.json`) y apertura directa de proyecto desde la tienda.
+- Rediseñé la terminal integrada para una experiencia más visual y profesional (tabs, estado y controles).
+
+### Lo que corregí
+- Arreglé el candado de mover ventana en Linux/GTK con arrastre nativo real.
+- Corregí el onboarding de Git para que el modal grande salga solo una vez y luego use recordatorio pequeño.
+- Evité inicialización en segundo plano de la terminal al abrir el editor (arranque lazy).
+- Apliqué ajustes de estabilidad/rendimiento en recarga de iconos y flujo del explorador.
+
+### Limpieza de release
+- Actualicé versión global del editor a `1.0.4`.
+- Preparé configuración limpia para distribución sin datos personales ni rutas locales del autor.
+
 ## v1.0.3 (Final)
 
 ### Editor
