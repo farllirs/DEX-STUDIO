@@ -555,7 +555,7 @@
 
                     <main class="git-pane git-pane-main">
                         <div class="git-pane-head">
-                            <h3><i data-lucide="git-branch"></i> Estado</h3>
+                            <h3><i data-lucide="git-branch"></i> Flujo Git paso a paso</h3>
                             <span id="git-selected-path" class="git-selected-path">Sin repositorio seleccionado</span>
                         </div>
                         <div class="git-pane-body">
@@ -573,14 +573,30 @@
                                     <strong id="git-count-staged">0</strong>
                                 </article>
                                 <article class="git-stat-card">
+                                    <span>Sin cambios</span>
+                                    <strong id="git-count-clean">0</strong>
+                                </article>
+                                <article class="git-stat-card">
                                     <span>Ahead/Behind</span>
                                     <strong id="git-ahead-behind">0 / 0</strong>
                                 </article>
                             </div>
 
+                            <div class="git-card git-guidance-panel">
+                                <div class="git-card-head">
+                                    <h4><i data-lucide="shield-alert"></i> Diagnóstico guiado</h4>
+                                </div>
+                                <p id="git-workflow-state" class="git-guidance-state">Selecciona un repositorio para comenzar.</p>
+                                <p id="git-workflow-hint" class="git-guidance-hint">Sigue los pasos sugeridos y el panel te dirá qué falta.</p>
+                                <div id="git-last-error-box" class="git-error-box" style="display:none;">
+                                    <strong>Último error</strong>
+                                    <p id="git-last-error-text">-</p>
+                                </div>
+                            </div>
+
                             <div class="git-card">
                                 <div class="git-card-head">
-                                    <h4><i data-lucide="file-text"></i> Cambios</h4>
+                                    <h4><i data-lucide="file-text"></i> Paso 1: Revisa cambios</h4>
                                     <div class="git-card-actions">
                                         <button class="btn-secondary btn-sm" onclick="app.gitStageAll()">
                                             <i data-lucide="plus-circle"></i> Stage all
@@ -590,23 +606,40 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div id="git-changes-list" class="git-changes-list"></div>
+                                <p class="git-step-hint">Aquí ves cada archivo que sí cambió y puedes hacer stage/unstage/descartar.</p>
+                                <div id="git-changed-list" class="git-changes-list"></div>
                             </div>
 
                             <div class="git-card">
                                 <div class="git-card-head">
-                                    <h4><i data-lucide="upload"></i> Commit & Sync</h4>
+                                    <h4><i data-lucide="check-circle"></i> Archivos sin cambios</h4>
+                                </div>
+                                <p class="git-step-hint">Estos archivos ya están versionados y no tienen cambios pendientes.</p>
+                                <div id="git-clean-list" class="git-changes-list"></div>
+                            </div>
+
+                            <div class="git-card">
+                                <div class="git-card-head">
+                                    <h4><i data-lucide="upload"></i> Paso 2, 3 y 4: Commit y Push</h4>
+                                </div>
+                                <div class="git-sync-health">
+                                    <span id="git-token-state" class="git-health-chip">
+                                        <i data-lucide="key-round"></i> Token: no guardado
+                                    </span>
+                                    <span id="git-remote-state" class="git-health-chip">
+                                        <i data-lucide="link-2-off"></i> Origin: sin configurar
+                                    </span>
                                 </div>
                                 <div class="git-inline-form">
                                     <input id="git-commit-message" class="form-input" type="text" placeholder="Mensaje de commit">
                                     <button class="btn-primary btn-sm" onclick="app.gitCommitChanges()">
-                                        <i data-lucide="check-circle"></i> Commit
+                                        <i data-lucide="check-circle"></i> Paso 2: Commit
                                     </button>
                                 </div>
                                 <div class="git-inline-form">
                                     <input id="git-remote-url" class="form-input" type="text" placeholder="Remote URL (origin)">
                                     <button class="btn-secondary btn-sm" onclick="app.gitSetRemoteOrigin()">
-                                        <i data-lucide="globe"></i> Set Remote
+                                        <i data-lucide="globe"></i> Paso 3: Set Remote
                                     </button>
                                 </div>
                                 <div class="git-inline-form">
@@ -616,12 +649,32 @@
                                     </button>
                                 </div>
                                 <div class="git-inline-form">
+                                    <input id="git-github-repo-name" class="form-input" type="text" placeholder="Nombre para crear repo en GitHub">
+                                    <button class="btn-secondary btn-sm" onclick="app.gitCreateGithubRepo()">
+                                        <i data-lucide="github"></i> Crear en GitHub
+                                    </button>
+                                </div>
+                                <div class="git-inline-form">
                                     <button class="btn-secondary btn-sm" onclick="app.gitPullRepo()">
                                         <i data-lucide="download"></i> Pull
                                     </button>
                                     <button class="btn-primary btn-sm" onclick="app.gitPushRepo()">
-                                        <i data-lucide="upload"></i> Push
+                                        <i data-lucide="upload"></i> Paso 4: Push
                                     </button>
+                                </div>
+                                <div class="git-inline-form">
+                                    <select id="git-pull-strategy" class="form-input">
+                                        <option value="ff-only">Pull strategy: Fast-forward only</option>
+                                    </select>
+                                    <button class="btn-secondary btn-sm" disabled title="Modo seguro activo">
+                                        <i data-lucide="shield"></i> Modo seguro
+                                    </button>
+                                </div>
+                                <div class="git-inline-form">
+                                    <button class="btn-secondary btn-sm" onclick="app.gitSetUpstreamCurrent()">
+                                        <i data-lucide="link"></i> Vincular upstream actual
+                                    </button>
+                                    <span class="git-safe-note"><i data-lucide="triangle-alert"></i> Pull seguro: sin merge automático</span>
                                 </div>
                             </div>
                         </div>

@@ -1,7 +1,7 @@
 import os
 import re
 import subprocess
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 
 class GitService:
@@ -34,12 +34,16 @@ class GitService:
         )
         ok = proc.returncode == 0
         if check and not ok:
+            raw_error = (proc.stderr or proc.stdout or 'Comando git falló').strip()
+            error_kind, error_hint = self._classify_git_error(raw_error)
             return {
                 'success': False,
                 'code': proc.returncode,
                 'stdout': proc.stdout or '',
                 'stderr': proc.stderr or '',
-                'error': (proc.stderr or proc.stdout or 'Comando git falló').strip()
+                'error': raw_error,
+                'error_kind': error_kind,
+                'hint': error_hint
             }
         return {
             'success': ok,
@@ -47,6 +51,61 @@ class GitService:
             'stdout': proc.stdout or '',
             'stderr': proc.stderr or ''
         }
+
+    def _classify_git_error(self, text):
+        raw = (text or '').strip()
+        lower = raw.lower()
+
+        if 'need to specify how to reconcile divergent branches' in lower:
+            return (
+                'divergent_pull_strategy',
+                'Configura una estrategia de pull (merge, rebase o ff-only) antes de sincronizar.'
+            )
+        if 'refusing to merge unrelated histories' in lower:
+            return (
+                'unrelated_histories',
+                'El repositorio local y remoto no comparten historial. Usa pull avanzado con historiales no relacionados.'
+            )
+        if 'would be overwritten by merge' in lower:
+            return (
+                'local_changes_would_be_overwritten',
+                'Tienes cambios locales sin guardar en commits. Haz commit o stash antes de pull.'
+            )
+        if (
+            'no tracking information for the current branch' in lower
+            or 'has no upstream branch' in lower
+            or 'set-upstream' in lower
+        ):
+            return (
+                'missing_upstream',
+                'La branch local no tiene upstream. Vincula la branch actual con origin/<branch>.'
+            )
+        if 'non-fast-forward' in lower or 'fetch first' in lower:
+            return (
+                'non_fast_forward',
+                'El remoto tiene commits nuevos. Haz pull y resuelve conflictos antes de push.'
+            )
+        if (
+            'authentication failed' in lower
+            or 'invalid username or password' in lower
+            or 'could not read username' in lower
+            or 'permission denied (publickey)' in lower
+        ):
+            return (
+                'auth_failed',
+                'Credenciales inválidas o faltantes. Revisa token GitHub/credenciales del remoto.'
+            )
+        if 'conflict' in lower:
+            return (
+                'merge_conflict',
+                'Hay conflictos de merge. Resuélvelos, crea commit y vuelve a sincronizar.'
+            )
+        if 'not a git repository' in lower:
+            return (
+                'not_a_repo',
+                'La carpeta seleccionada no es un repositorio Git.'
+            )
+        return ('git_error', '')
 
     def _parse_porcelain(self, text):
         changed = []
@@ -85,7 +144,9 @@ class GitService:
         if not line:
             return {'branch': branch, 'ahead': ahead, 'behind': behind}
 
-        if '...' in line:
+        if line.startswith('No commits yet on '):
+            branch = line.replace('No commits yet on ', '', 1).strip()
+        elif '...' in line:
             branch = line.split('...')[0].strip()
         else:
             branch = line.split(' ')[0].strip()
@@ -101,6 +162,25 @@ class GitService:
                 behind = int(m_b.group(1))
         return {'branch': branch, 'ahead': ahead, 'behind': behind}
 
+    def _resolve_current_branch(self, cwd):
+        """Return current branch, including unborn branches after git init."""
+        head = self._run_git(['symbolic-ref', '--short', 'HEAD'], cwd)
+        branch = (head.get('stdout') or '').strip()
+        if branch and branch != 'HEAD':
+            return branch
+
+        status = self._run_git(['status', '--porcelain', '-b'], cwd)
+        info = self._parse_branch_head(status.get('stdout', ''))
+        branch = (info.get('branch') or '').strip()
+        if branch and branch != 'HEAD':
+            return branch
+
+        default_branch = self._run_git(['config', '--get', 'init.defaultBranch'], cwd)
+        candidate = (default_branch.get('stdout') or '').strip()
+        if candidate:
+            return candidate
+        return 'main'
+
     def _inject_token(self, repo_url, token):
         if not token or not repo_url:
             return repo_url
@@ -111,7 +191,8 @@ class GitService:
             netloc = p.netloc
             if '@' in netloc:
                 netloc = netloc.split('@', 1)[1]
-            netloc = f'{token}@{netloc}'
+            safe_token = quote(token, safe='')
+            netloc = f'x-access-token:{safe_token}@{netloc}'
             return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
         except Exception:
             return repo_url
@@ -208,12 +289,9 @@ class GitService:
                 target = None
                 args = ['clone', repo_url]
 
-            proc = subprocess.run(args, capture_output=True, text=True, cwd=dest_root)
-            if proc.returncode != 0:
-                return {
-                    'success': False,
-                    'error': (proc.stderr or proc.stdout or 'No se pudo clonar').strip()
-                }
+            proc = self._run_git(args, dest_root, check=True)
+            if not proc['success']:
+                return proc
 
             cloned_path = target
             if not cloned_path:
@@ -261,6 +339,19 @@ class GitService:
 
             branch_info = self._parse_branch_head(s['stdout'])
             changed = self._parse_porcelain(s['stdout'])
+            tracked_res = self._run_git(['ls-files'], cwd, check=True)
+            if not tracked_res['success']:
+                return tracked_res
+            tracked_files = [line.strip() for line in tracked_res['stdout'].splitlines() if line.strip()]
+            changed_paths = set()
+            for item in changed:
+                path = item.get('path')
+                old_path = item.get('old_path')
+                if path:
+                    changed_paths.add(path)
+                if old_path:
+                    changed_paths.add(old_path)
+            clean_files = [path for path in tracked_files if path not in changed_paths]
 
             remote = self._run_git(['remote', '-v'], cwd)
             remotes = []
@@ -278,6 +369,10 @@ class GitService:
                 'changed_files': changed,
                 'changed_count': len(changed),
                 'staged_count': len([c for c in changed if c['staged']]),
+                'tracked_files': tracked_files,
+                'tracked_count': len(tracked_files),
+                'clean_files': clean_files,
+                'clean_count': len(clean_files),
                 'remotes': remotes
             }
         except Exception as e:
@@ -411,28 +506,106 @@ class GitService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def set_pull_strategy(self, repo_path, strategy='merge'):
+        try:
+            cwd = self._expand(repo_path)
+            if not self._repo_root(cwd):
+                return {'success': False, 'error': 'No es un repositorio Git'}
+            mode = (strategy or 'merge').strip().lower()
+            if mode not in ('merge', 'rebase', 'ff-only'):
+                return {'success': False, 'error': 'Estrategia de pull inválida'}
+
+            if mode == 'rebase':
+                r = self._run_git(['config', 'pull.rebase', 'true'], cwd, check=True)
+                if not r['success']:
+                    return r
+                self._run_git(['config', '--unset', 'pull.ff'], cwd)
+            elif mode == 'ff-only':
+                r = self._run_git(['config', 'pull.ff', 'only'], cwd, check=True)
+                if not r['success']:
+                    return r
+                self._run_git(['config', 'pull.rebase', 'false'], cwd)
+            else:
+                r = self._run_git(['config', 'pull.rebase', 'false'], cwd, check=True)
+                if not r['success']:
+                    return r
+                self._run_git(['config', '--unset', 'pull.ff'], cwd)
+
+            return {'success': True, 'strategy': mode, 'message': 'Estrategia de pull guardada'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_pull_strategy(self, repo_path):
+        try:
+            cwd = self._expand(repo_path)
+            if not self._repo_root(cwd):
+                return {'success': False, 'error': 'No es un repositorio Git'}
+
+            ff = (self._run_git(['config', '--get', 'pull.ff'], cwd).get('stdout') or '').strip().lower()
+            rebase = (self._run_git(['config', '--get', 'pull.rebase'], cwd).get('stdout') or '').strip().lower()
+
+            if ff == 'only':
+                strategy = 'ff-only'
+            elif rebase in ('true', 'merges', 'interactive'):
+                strategy = 'rebase'
+            else:
+                strategy = 'merge'
+            return {'success': True, 'strategy': strategy}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def set_upstream(self, repo_path, remote='origin', branch=None):
+        try:
+            cwd = self._expand(repo_path)
+            if not self._repo_root(cwd):
+                return {'success': False, 'error': 'No es un repositorio Git'}
+            remote_name = (remote or 'origin').strip() or 'origin'
+            branch_name = (branch or '').strip() or self._resolve_current_branch(cwd)
+            if not branch_name:
+                return {'success': False, 'error': 'No se pudo detectar la branch actual'}
+
+            r = self._run_git(
+                ['branch', '--set-upstream-to', f'{remote_name}/{branch_name}', branch_name],
+                cwd,
+                check=True
+            )
+            if not r['success']:
+                return r
+            return {
+                'success': True,
+                'branch': branch_name,
+                'remote': remote_name,
+                'message': f'Upstream configurado: {branch_name} -> {remote_name}/{branch_name}'
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def push(self, repo_path, remote='origin', branch=None, token=None):
         try:
             cwd = self._expand(repo_path)
             if not self._repo_root(cwd):
                 return {'success': False, 'error': 'No es un repositorio Git'}
-            remote = (remote or 'origin').strip()
+            remote = (remote or 'origin').strip() or 'origin'
             branch = (branch or '').strip()
             original_url = None
+            get_url = self._run_git(['remote', 'get-url', remote], cwd, check=True)
+            if not get_url.get('success'):
+                return get_url
+            original_url = get_url.get('stdout', '').strip()
+            if not original_url:
+                return {'success': False, 'error': f'No existe URL configurada para remote "{remote}"'}
 
-            if token:
-                get_url = self._run_git(['remote', 'get-url', remote], cwd, check=True)
-                if get_url['success']:
-                    original_url = get_url['stdout'].strip()
-                    authed_url = self._inject_token(original_url, token)
-                    if authed_url:
-                        self._run_git(['remote', 'set-url', remote, authed_url], cwd)
+            if not branch:
+                branch = self._resolve_current_branch(cwd)
+            if not branch:
+                return {'success': False, 'error': 'No se pudo detectar la branch actual'}
 
-            args = ['push', '-u', remote]
-            if branch:
-                args.append(branch)
+            authed_url = self._inject_token(original_url, token) if token else original_url
+            if authed_url and authed_url != original_url:
+                self._run_git(['remote', 'set-url', remote, authed_url], cwd)
+            args = ['push', '-u', remote, branch]
             r = self._run_git(args, cwd, check=True)
-            if original_url:
+            if authed_url and authed_url != original_url:
                 self._run_git(['remote', 'set-url', remote, original_url], cwd)
             if not r['success']:
                 return r
@@ -440,18 +613,32 @@ class GitService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def pull(self, repo_path, remote='origin', branch=None):
+    def pull(self, repo_path, remote='origin', branch=None, strategy=None, allow_unrelated=False):
         try:
             cwd = self._expand(repo_path)
             if not self._repo_root(cwd):
                 return {'success': False, 'error': 'No es un repositorio Git'}
-            args = ['pull', remote]
+            args = ['pull']
+            mode = (strategy or '').strip().lower()
+            if mode == 'rebase':
+                args.append('--rebase')
+            elif mode == 'merge':
+                args.append('--no-rebase')
+            elif mode == 'ff-only':
+                args.append('--ff-only')
+            if allow_unrelated:
+                args.append('--allow-unrelated-histories')
+            args.append(remote)
             if branch:
                 args.append(branch)
             r = self._run_git(args, cwd, check=True)
             if not r['success']:
                 return r
-            return {'success': True, 'message': (r['stdout'] or 'Pull completado').strip()}
+            return {
+                'success': True,
+                'message': (r['stdout'] or 'Pull completado').strip(),
+                'strategy_used': mode or 'default'
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -503,11 +690,13 @@ class GitService:
         branches = self.branches(repo_path)
         logs = self.log(repo_path, 20)
         identity = self.get_identity(repo_path)
+        pull_strategy = self.get_pull_strategy(repo_path)
         return {
             'success': True,
             'status': status,
             'branches': branches.get('branches', []),
             'current_branch': branches.get('current') or status.get('branch'),
             'commits': logs.get('commits', []),
-            'identity': identity if identity.get('success') else {'success': True, 'name': '', 'email': ''}
+            'identity': identity if identity.get('success') else {'success': True, 'name': '', 'email': ''},
+            'pull_strategy': pull_strategy.get('strategy') if pull_strategy.get('success') else 'merge'
         }

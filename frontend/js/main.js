@@ -869,6 +869,8 @@ const app = {
     _fpsRafId: null,
     _gitSelectedRepo: null,
     _gitDashboard: null,
+    _gitLastError: '',
+    _gitSafeMode: true,
     _gitOnboardingReminderShown: false,
     _startupBootDone: false,
     _windowDragBound: false,
@@ -4552,7 +4554,7 @@ const app = {
             if (listEl) listEl.innerHTML = '<p class="empty-state">Cargando repositorios...</p>';
             var reposRes = await window.pywebview.api.git_list_repos();
             if (!reposRes.success) {
-                this.log(reposRes.error || 'No se pudieron listar repositorios', true);
+                this._handleGitFailure('listar repositorios', reposRes, 'No se pudieron listar repositorios');
                 return;
             }
             var repos = reposRes.repos || [];
@@ -4576,6 +4578,8 @@ const app = {
                 if (tokenInput && this._settings.github_token) tokenInput.value = this._settings.github_token;
             } catch(e) {}
             this._syncGitProfileToWorkspaceInputs();
+            this._syncGitHealth(this._gitDashboard || null);
+            this._setGitLastError(this._gitLastError);
 
             if (this._gitSelectedRepo) {
                 await this.gitRefreshDashboard();
@@ -4583,7 +4587,7 @@ const app = {
                 this._renderGitEmptyState();
             }
         } catch(e) {
-            this.log('Error cargando Git Workspace: ' + e.message, true);
+            this._handleGitFailure('cargar Git Workspace', { error: e.message }, 'Error cargando Git Workspace');
         }
     },
 
@@ -4609,18 +4613,169 @@ const app = {
         var branchName = document.getElementById('git-branch-name');
         var changed = document.getElementById('git-count-changed');
         var staged = document.getElementById('git-count-staged');
+        var clean = document.getElementById('git-count-clean');
         var aheadBehind = document.getElementById('git-ahead-behind');
-        var changesList = document.getElementById('git-changes-list');
+        var changedList = document.getElementById('git-changed-list');
+        var cleanList = document.getElementById('git-clean-list');
         var branchesList = document.getElementById('git-branches-list');
         var historyList = document.getElementById('git-history-list');
         if (selectedPath) selectedPath.textContent = 'Sin repositorio seleccionado';
         if (branchName) branchName.textContent = '-';
         if (changed) changed.textContent = '0';
         if (staged) staged.textContent = '0';
+        if (clean) clean.textContent = '0';
         if (aheadBehind) aheadBehind.textContent = '0 / 0';
-        if (changesList) changesList.innerHTML = '<p class="empty-state">Selecciona o crea un repositorio para empezar</p>';
+        if (changedList) changedList.innerHTML = '<p class="empty-state">Selecciona o crea un repositorio para empezar</p>';
+        if (cleanList) cleanList.innerHTML = '<p class="empty-state">No hay archivos para mostrar</p>';
         if (branchesList) branchesList.innerHTML = '<p class="empty-state">Sin branches</p>';
         if (historyList) historyList.innerHTML = '<p class="empty-state">Sin commits</p>';
+        this._syncGitHealth(null);
+        this._updateGitWorkflowGuidance(null);
+        this._setGitLastError(this._gitLastError);
+    },
+
+    _maskGitToken: function(token) {
+        var t = String(token || '').trim();
+        if (!t) return '';
+        if (t.length <= 8) return '********';
+        return t.slice(0, 4) + '...' + t.slice(-4);
+    },
+
+    _syncGitHealth: function(dash) {
+        var tokenEl = document.getElementById('git-token-state');
+        var remoteEl = document.getElementById('git-remote-state');
+        var token = (this._settings.github_token || '').trim();
+        var origin = null;
+        if (dash && dash.status && Array.isArray(dash.status.remotes)) {
+            origin = dash.status.remotes.find(function(r) { return r.name === 'origin'; }) || null;
+        }
+        if (tokenEl) {
+            if (token) {
+                tokenEl.classList.add('ok');
+                tokenEl.innerHTML = '<i data-lucide="key-round"></i> Token: ' + this.escapeHtml(this._maskGitToken(token));
+            } else {
+                tokenEl.classList.remove('ok');
+                tokenEl.innerHTML = '<i data-lucide="key-round"></i> Token: no guardado';
+            }
+        }
+        if (remoteEl) {
+            if (origin && origin.url) {
+                remoteEl.classList.add('ok');
+                remoteEl.innerHTML = '<i data-lucide="link-2"></i> Origin: configurado';
+            } else {
+                remoteEl.classList.remove('ok');
+                remoteEl.innerHTML = '<i data-lucide="link-2-off"></i> Origin: sin configurar';
+            }
+        }
+        this._refreshIcons();
+    },
+
+    _setGitLastError: function(message) {
+        var box = document.getElementById('git-last-error-box');
+        var text = document.getElementById('git-last-error-text');
+        this._gitLastError = String(message || '').trim();
+        if (!box || !text) return;
+        if (!this._gitLastError) {
+            box.style.display = 'none';
+            text.textContent = '-';
+            return;
+        }
+        text.textContent = this._gitLastError;
+        box.style.display = '';
+    },
+
+    _guessGitHint: function(raw) {
+        var lower = String(raw || '').toLowerCase();
+        if (lower.indexOf('need to specify how to reconcile divergent branches') >= 0) {
+            return 'Configura una estrategia de pull y vuelve a intentar.';
+        }
+        if (lower.indexOf('refusing to merge unrelated histories') >= 0) {
+            return 'Activa "Permitir historiales no relacionados" y vuelve a hacer Pull.';
+        }
+        if (lower.indexOf('would be overwritten by merge') >= 0) {
+            return 'Haz commit o stash de tus cambios locales antes de Pull.';
+        }
+        if (lower.indexOf('has no upstream branch') >= 0 || lower.indexOf('no tracking information') >= 0 || lower.indexOf('set-upstream') >= 0) {
+            return 'Usa "Vincular upstream actual" para enlazar esta branch con origin.';
+        }
+        if (lower.indexOf('non-fast-forward') >= 0 || lower.indexOf('fetch first') >= 0) {
+            return 'Haz Pull para traer cambios remotos antes de Push.';
+        }
+        if (lower.indexOf('authentication failed') >= 0 || lower.indexOf('could not read username') >= 0 || lower.indexOf('invalid username or password') >= 0) {
+            return 'Revisa token/credenciales de GitHub y la URL remota.';
+        }
+        if (lower.indexOf('conflict') >= 0) {
+            return 'Resuelve los conflictos en archivos y crea un commit.';
+        }
+        return '';
+    },
+
+    _handleGitFailure: function(action, res, fallback) {
+        var base = '';
+        if (res && res.error) base = String(res.error).trim();
+        if (!base && res && res.stderr) base = String(res.stderr).trim();
+        if (!base) base = fallback || ('Falló ' + action);
+        var hint = (res && res.hint ? String(res.hint).trim() : '') || this._guessGitHint(base);
+        var finalMessage = hint ? (base + '\nSugerencia: ' + hint) : base;
+        this._setGitLastError(finalMessage);
+        this.log(finalMessage, true);
+    },
+
+    _updateGitWorkflowGuidance: function(dash) {
+        var stateEl = document.getElementById('git-workflow-state');
+        var hintEl = document.getElementById('git-workflow-hint');
+        if (!stateEl || !hintEl) return;
+
+        var repo = this._resolveGitRepo();
+        if (!repo || !dash || !dash.status) {
+            stateEl.textContent = 'Selecciona un repositorio para comenzar.';
+            hintEl.textContent = 'Primero elige un repo en la columna izquierda.';
+            return;
+        }
+
+        var status = dash.status || {};
+        var origin = Array.isArray(status.remotes)
+            ? status.remotes.find(function(r) { return r.name === 'origin'; })
+            : null;
+        var identity = dash.identity || {};
+        var hasIdentity = !!(String(identity.name || '').trim() && String(identity.email || '').trim());
+        var stagedCount = status.staged_count || 0;
+        var changedCount = status.changed_count || 0;
+        var ahead = status.ahead || 0;
+        var behind = status.behind || 0;
+
+        if (!hasIdentity) {
+            stateEl.textContent = 'Falta identidad Git (nombre y correo).';
+            hintEl.textContent = 'Completa Identidad para que tus commits queden firmados correctamente.';
+            return;
+        }
+        if (!origin || !origin.url) {
+            stateEl.textContent = 'Falta configurar remote origin.';
+            hintEl.textContent = 'Define la URL remota en "Paso 2, 3 y 4: Commit y Push".';
+            return;
+        }
+        if (changedCount > 0 && stagedCount === 0) {
+            stateEl.textContent = 'Hay cambios sin stage.';
+            hintEl.textContent = 'Usa "Stage all" o stage por archivo antes de hacer commit.';
+            return;
+        }
+        if (stagedCount > 0) {
+            stateEl.textContent = 'Listo para commit.';
+            hintEl.textContent = 'Escribe un mensaje claro y ejecuta "Paso 2: Commit".';
+            return;
+        }
+        if (behind > 0) {
+            stateEl.textContent = 'Tu branch está detrás del remoto.';
+            hintEl.textContent = 'Haz Pull (modo seguro ff-only) antes de empujar nuevos cambios.';
+            return;
+        }
+        if (ahead > 0) {
+            stateEl.textContent = 'Tienes commits locales pendientes de push.';
+            hintEl.textContent = 'Ejecuta "Paso 4: Push" para subir tus commits.';
+            return;
+        }
+        stateEl.textContent = 'Repositorio sincronizado y sin cambios pendientes.';
+        hintEl.textContent = 'Puedes seguir editando o crear una nueva branch de trabajo.';
     },
 
     gitSelectRepo: async function(path) {
@@ -4637,9 +4792,19 @@ const app = {
         var dash = await window.pywebview.api.git_dashboard(repo);
         if (!dash.success) {
             this._gitDashboard = null;
-            this.log(dash.error || 'No se pudo obtener estado Git', true);
+            this._handleGitFailure('cargar dashboard', dash, 'No se pudo obtener estado Git');
             this._renderGitEmptyState();
             return;
+        }
+        if (this._gitSafeMode && dash.pull_strategy !== 'ff-only') {
+            await window.pywebview.api.git_set_pull_strategy(repo, 'ff-only');
+            dash = await window.pywebview.api.git_dashboard(repo);
+            if (!dash.success) {
+                this._gitDashboard = null;
+                this._handleGitFailure('aplicar modo seguro Git', dash, 'No se pudo aplicar modo seguro de pull');
+                this._renderGitEmptyState();
+                return;
+            }
         }
         this._gitDashboard = dash;
         this._renderGitDashboard(dash);
@@ -4651,18 +4816,22 @@ const app = {
         var branchName = document.getElementById('git-branch-name');
         var changed = document.getElementById('git-count-changed');
         var staged = document.getElementById('git-count-staged');
+        var clean = document.getElementById('git-count-clean');
         var aheadBehind = document.getElementById('git-ahead-behind');
-        var changesList = document.getElementById('git-changes-list');
+        var changedList = document.getElementById('git-changed-list');
+        var cleanList = document.getElementById('git-clean-list');
         var branchesList = document.getElementById('git-branches-list');
         var historyList = document.getElementById('git-history-list');
         var remoteInput = document.getElementById('git-remote-url');
         var nameInput = document.getElementById('git-user-name');
         var emailInput = document.getElementById('git-user-email');
+        var pullStrategySelect = document.getElementById('git-pull-strategy');
 
         if (selectedPath) selectedPath.textContent = status.repo_root || this._gitSelectedRepo || '-';
         if (branchName) branchName.textContent = status.branch || dash.current_branch || 'HEAD';
         if (changed) changed.textContent = String(status.changed_count || 0);
         if (staged) staged.textContent = String(status.staged_count || 0);
+        if (clean) clean.textContent = String(status.clean_count || 0);
         if (aheadBehind) aheadBehind.textContent = (status.ahead || 0) + ' / ' + (status.behind || 0);
 
         if (remoteInput) {
@@ -4672,13 +4841,20 @@ const app = {
 
         if (nameInput && dash.identity && dash.identity.name !== undefined) nameInput.value = dash.identity.name || '';
         if (emailInput && dash.identity && dash.identity.email !== undefined) emailInput.value = dash.identity.email || '';
+        if (pullStrategySelect) {
+            pullStrategySelect.value = 'ff-only';
+            pullStrategySelect.disabled = true;
+        }
+        this._syncGitHealth(dash);
+        this._updateGitWorkflowGuidance(dash);
+        this._setGitLastError(this._gitLastError);
 
-        if (changesList) {
+        if (changedList) {
             var files = status.changed_files || [];
             if (!files.length) {
-                changesList.innerHTML = '<p class="empty-state">Working tree limpio</p>';
+                changedList.innerHTML = '<p class="empty-state">Working tree limpio</p>';
             } else {
-                changesList.innerHTML = files.map(function(f) {
+                changedList.innerHTML = files.map(function(f) {
                     var stagedFlag = f.staged ? '<span class="git-pill git-pill-staged">staged</span>' : '<span class="git-pill">unstaged</span>';
                     var statusText = (f.index_status || ' ') + (f.worktree_status || ' ');
                     var actions = f.staged
@@ -4693,6 +4869,22 @@ const app = {
                         '<div class="git-change-actions">' +
                         actions +
                         '<button class="btn-secondary btn-sm" onclick="app.gitDiscardFile(\'' + app.escapeHtml(f.path).replace(/'/g, '&#39;') + '\')">Descartar</button>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+        if (cleanList) {
+            var cleanFiles = status.clean_files || [];
+            if (!cleanFiles.length) {
+                cleanList.innerHTML = '<p class="empty-state">Sin archivos limpios versionados</p>';
+            } else {
+                cleanList.innerHTML = cleanFiles.map(function(path) {
+                    return '<div class="git-change-item git-change-item-clean">' +
+                        '<div class="git-change-main">' +
+                        '<code class="git-status-code">OK</code>' +
+                        '<span class="git-change-path">' + app.escapeHtml(path) + '</span>' +
+                        '<span class="git-pill git-pill-current">sin cambios</span>' +
                         '</div>' +
                         '</div>';
                 }).join('');
@@ -4738,9 +4930,10 @@ const app = {
         }
         var res = await window.pywebview.api.initialize_git(this.currentProjectPath);
         if (!res.success) {
-            this.log(res.error || 'No se pudo inicializar Git', true);
+            this._handleGitFailure('inicializar repositorio', res, 'No se pudo inicializar Git');
             return;
         }
+        this._setGitLastError('');
         if (this._settings.github_name && this._settings.github_email) {
             await window.pywebview.api.git_set_identity(
                 this.currentProjectPath,
@@ -4762,9 +4955,10 @@ const app = {
         }
         var res = await window.pywebview.api.git_clone_repo(url);
         if (!res.success) {
-            this.log(res.error || 'No se pudo clonar el repositorio', true);
+            this._handleGitFailure('clonar repositorio', res, 'No se pudo clonar el repositorio');
             return;
         }
+        this._setGitLastError('');
         this._gitSelectedRepo = res.path || null;
         this.showNotification('Git', 'Repositorio clonado', 'success');
         if (input) input.value = '';
@@ -4780,9 +4974,10 @@ const app = {
         }
         var res = await window.pywebview.api.git_create_repo(name);
         if (!res.success) {
-            this.log(res.error || 'No se pudo crear el repositorio', true);
+            this._handleGitFailure('crear repositorio', res, 'No se pudo crear el repositorio');
             return;
         }
+        this._setGitLastError('');
         this._gitSelectedRepo = res.path || null;
         this.showNotification('Git', 'Repositorio creado', 'success');
         if (this._settings.github_name && this._settings.github_email && this._gitSelectedRepo) {
@@ -4800,7 +4995,8 @@ const app = {
         var repo = this._resolveGitRepo();
         if (!repo) return;
         var res = await window.pywebview.api.git_stage(repo, [path]);
-        if (!res.success) this.log(res.error || 'No se pudo stage', true);
+        if (!res.success) this._handleGitFailure('stage archivo', res, 'No se pudo stage');
+        else this._setGitLastError('');
         await this.gitRefreshDashboard();
     },
 
@@ -4808,7 +5004,8 @@ const app = {
         var repo = this._resolveGitRepo();
         if (!repo) return;
         var res = await window.pywebview.api.git_unstage(repo, [path]);
-        if (!res.success) this.log(res.error || 'No se pudo unstage', true);
+        if (!res.success) this._handleGitFailure('unstage archivo', res, 'No se pudo unstage');
+        else this._setGitLastError('');
         await this.gitRefreshDashboard();
     },
 
@@ -4817,7 +5014,8 @@ const app = {
         if (!repo) return;
         if (!confirm('Descartar cambios de ' + path + '?')) return;
         var res = await window.pywebview.api.git_discard(repo, [path]);
-        if (!res.success) this.log(res.error || 'No se pudo descartar', true);
+        if (!res.success) this._handleGitFailure('descartar cambios', res, 'No se pudo descartar');
+        else this._setGitLastError('');
         await this.gitRefreshDashboard();
     },
 
@@ -4825,7 +5023,8 @@ const app = {
         var repo = this._resolveGitRepo();
         if (!repo) return;
         var res = await window.pywebview.api.git_stage(repo, ['.']);
-        if (!res.success) this.log(res.error || 'No se pudo stage all', true);
+        if (!res.success) this._handleGitFailure('stage all', res, 'No se pudo stage all');
+        else this._setGitLastError('');
         await this.gitRefreshDashboard();
     },
 
@@ -4835,14 +5034,22 @@ const app = {
         var input = document.getElementById('git-commit-message');
         var message = (input && input.value || '').trim();
         if (!message) {
+            this._setGitLastError('Escribe un mensaje de commit.');
             this.log('Escribe un mensaje de commit', true);
+            return;
+        }
+        var status = (this._gitDashboard && this._gitDashboard.status) || {};
+        if ((status.staged_count || 0) === 0) {
+            this._setGitLastError('No hay archivos en stage. Usa "Stage all" o "Stage" por archivo antes del commit.');
+            this.log('No hay archivos en stage. Usa "Stage all" o "Stage" por archivo antes del commit.', true);
             return;
         }
         var res = await window.pywebview.api.git_commit(repo, message);
         if (!res.success) {
-            this.log(res.error || 'No se pudo crear commit', true);
+            this._handleGitFailure('crear commit', res, 'No se pudo crear commit');
             return;
         }
+        this._setGitLastError('');
         if (input) input.value = '';
         this.showNotification('Git', 'Commit creado', 'success');
         await this.gitRefreshDashboard();
@@ -4859,9 +5066,10 @@ const app = {
         this.syncGitSettingsInputs();
         var res = await window.pywebview.api.git_set_identity(repo, name.trim(), email.trim());
         if (!res.success) {
-            this.log(res.error || 'No se pudo guardar identidad', true);
+            this._handleGitFailure('guardar identidad', res, 'No se pudo guardar identidad');
             return;
         }
+        this._setGitLastError('');
         this.showNotification('Git', 'Identidad actualizada', 'success');
         await this.gitRefreshDashboard();
     },
@@ -4871,9 +5079,10 @@ const app = {
         if (!repo) return;
         var res = await window.pywebview.api.git_checkout_branch(repo, branch);
         if (!res.success) {
-            this.log(res.error || 'No se pudo cambiar de branch', true);
+            this._handleGitFailure('cambiar branch', res, 'No se pudo cambiar de branch');
             return;
         }
+        this._setGitLastError('');
         await this.gitRefreshDashboard();
     },
 
@@ -4888,9 +5097,10 @@ const app = {
         }
         var res = await window.pywebview.api.git_create_branch(repo, branch, true);
         if (!res.success) {
-            this.log(res.error || 'No se pudo crear branch', true);
+            this._handleGitFailure('crear branch', res, 'No se pudo crear branch');
             return;
         }
+        this._setGitLastError('');
         if (input) input.value = '';
         await this.gitRefreshDashboard();
     },
@@ -4900,27 +5110,60 @@ const app = {
         if (!repo) return;
         var url = (document.getElementById('git-remote-url') || {}).value || '';
         if (!url.trim()) {
+            this._setGitLastError('Escribe la URL del remote origin antes de continuar.');
             this.log('Escribe la URL del remote', true);
             return;
         }
         var res = await window.pywebview.api.git_set_remote(repo, url.trim(), 'origin');
         if (!res.success) {
-            this.log(res.error || 'No se pudo configurar remote', true);
+            this._handleGitFailure('configurar remote', res, 'No se pudo configurar remote');
             return;
         }
+        this._setGitLastError('');
         this.showNotification('Git', 'Remote origin actualizado', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitSavePullStrategy: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var strategy = 'ff-only';
+        var res = await window.pywebview.api.git_set_pull_strategy(repo, strategy);
+        if (!res.success) {
+            this._handleGitFailure('guardar estrategia pull', res, 'No se pudo guardar estrategia de pull');
+            return;
+        }
+        this._setGitLastError('');
+        this.showNotification('Git', 'Estrategia de pull guardada', 'success');
+        await this.gitRefreshDashboard();
+    },
+
+    gitSetUpstreamCurrent: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) return;
+        var branch = (this._gitDashboard && this._gitDashboard.current_branch) || null;
+        var res = await window.pywebview.api.git_set_upstream(repo, 'origin', branch);
+        if (!res.success) {
+            this._handleGitFailure('vincular upstream', res, 'No se pudo vincular upstream');
+            return;
+        }
+        this._setGitLastError('');
+        this.showNotification('Git', 'Upstream configurado', 'success');
         await this.gitRefreshDashboard();
     },
 
     gitPullRepo: async function() {
         var repo = this._resolveGitRepo();
         if (!repo) return;
+        var strategy = 'ff-only';
+        var allowUnrelated = false;
         var branch = (this._gitDashboard && this._gitDashboard.current_branch) || null;
-        var res = await window.pywebview.api.git_pull(repo, 'origin', branch);
+        var res = await window.pywebview.api.git_pull(repo, 'origin', branch, strategy, allowUnrelated);
         if (!res.success) {
-            this.log(res.error || 'Pull falló', true);
+            this._handleGitFailure('pull', res, 'Pull falló');
             return;
         }
+        this._setGitLastError('');
         this.showNotification('Git', 'Pull completado', 'success');
         await this.gitRefreshDashboard();
     },
@@ -4928,6 +5171,18 @@ const app = {
     gitPushRepo: async function() {
         var repo = this._resolveGitRepo();
         if (!repo) return;
+        await this.gitRefreshDashboard();
+        var status = (this._gitDashboard && this._gitDashboard.status) || {};
+        if ((status.changed_count || 0) > 0) {
+            this._setGitLastError('Aún hay cambios sin commit. Haz stage + commit antes del push.');
+            this.log('Aún hay cambios sin commit. Haz Step 1 (stage) y Step 2 (commit) antes del push.', true);
+            return;
+        }
+        if ((status.behind || 0) > 0) {
+            this._setGitLastError('Tu branch está detrás del remoto. Haz Pull en modo seguro antes de Push.');
+            this.log('Tu branch está detrás del remoto. Haz Pull antes de Push.', true);
+            return;
+        }
         var tokenInput = document.getElementById('git-token-input');
         var token = (tokenInput && tokenInput.value || this._settings.github_token || '').trim() || null;
         var name = (this._settings.github_name || '').trim();
@@ -4935,12 +5190,21 @@ const app = {
         if (name && email) {
             await window.pywebview.api.git_set_identity(repo, name, email);
         }
+        var origin = status && Array.isArray(status.remotes)
+            ? status.remotes.find(function(r) { return r.name === 'origin'; })
+            : null;
+        if (!origin || !origin.url) {
+            this._setGitLastError('Configura el remote origin antes de hacer push.');
+            this.log('Configura el remote origin antes de hacer push', true);
+            return;
+        }
         var branch = (this._gitDashboard && this._gitDashboard.current_branch) || null;
         var res = await window.pywebview.api.git_push(repo, 'origin', branch, token);
         if (!res.success) {
-            this.log(res.error || 'Push falló', true);
+            this._handleGitFailure('push', res, 'Push falló');
             return;
         }
+        this._setGitLastError('');
         this.showNotification('Git', 'Push completado', 'success');
         await this.gitRefreshDashboard();
     },
@@ -4957,10 +5221,52 @@ const app = {
         this.syncGitSettingsInputs();
         var res = await window.pywebview.api.save_github_token(token);
         if (!res.success) {
-            this.log(res.error || 'No se pudo guardar token', true);
+            this._handleGitFailure('guardar token', res, 'No se pudo guardar token');
             return;
         }
+        this._setGitLastError('');
         this.showNotification('Git', 'Token guardado', 'success');
+        this._syncGitHealth(this._gitDashboard || null);
+    },
+
+    gitCreateGithubRepo: async function() {
+        var repo = this._resolveGitRepo();
+        if (!repo) {
+            this.log('Selecciona un repositorio local primero', true);
+            return;
+        }
+        var tokenInput = document.getElementById('git-token-input');
+        var token = (tokenInput && tokenInput.value || this._settings.github_token || '').trim();
+        if (!token) {
+            this.log('Guarda un token de GitHub para crear repositorios', true);
+            return;
+        }
+        var nameInput = document.getElementById('git-github-repo-name');
+        var candidate = (nameInput && nameInput.value || '').trim();
+        if (!candidate) candidate = (repo.split('/').pop() || 'dex-repo').trim();
+
+        var created = await window.pywebview.api.create_github_repo(token, candidate, 'Repositorio creado desde DEX STUDIO');
+        if (!created.success) {
+            this._handleGitFailure('crear repo GitHub', created, 'No se pudo crear repositorio en GitHub');
+            return;
+        }
+
+        var remoteInput = document.getElementById('git-remote-url');
+        var remoteUrl = (created.clone_url || created.repo_url || '').trim();
+        if (remoteInput && remoteUrl) remoteInput.value = remoteUrl;
+        if (!remoteUrl) {
+            this.log('Repositorio creado, pero no se recibió URL para origin', true);
+            return;
+        }
+        var setRemote = await window.pywebview.api.git_set_remote(repo, remoteUrl, 'origin');
+        if (!setRemote.success) {
+            this._handleGitFailure('configurar origin', setRemote, 'Repositorio creado, pero falló configurar origin');
+            return;
+        }
+        this._setGitLastError('');
+        if (nameInput) nameInput.value = '';
+        this.showNotification('Git', 'Repo GitHub creado y origin configurado', 'success');
+        await this.gitRefreshDashboard();
     },
 
     // Compatibilidad con acciones antiguas

@@ -801,11 +801,23 @@ class API:
             return {'success': False, 'error': 'No hay repositorio seleccionado'}
         return self.git_service.push(repo, remote, branch, token)
 
-    def git_pull(self, repo_path, remote='origin', branch=None):
+    def git_pull(self, repo_path, remote='origin', branch=None, strategy=None, allow_unrelated=False):
         repo = self._resolve_git_repo_path(repo_path)
         if not repo:
             return {'success': False, 'error': 'No hay repositorio seleccionado'}
-        return self.git_service.pull(repo, remote, branch)
+        return self.git_service.pull(repo, remote, branch, strategy, allow_unrelated)
+
+    def git_set_pull_strategy(self, repo_path, strategy='merge'):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.set_pull_strategy(repo, strategy)
+
+    def git_set_upstream(self, repo_path, remote='origin', branch=None):
+        repo = self._resolve_git_repo_path(repo_path)
+        if not repo:
+            return {'success': False, 'error': 'No hay repositorio seleccionado'}
+        return self.git_service.set_upstream(repo, remote, branch)
 
     def git_log(self, repo_path, limit=25):
         repo = self._resolve_git_repo_path(repo_path)
@@ -1640,13 +1652,21 @@ class API:
         """Create a new GitHub repository"""
         try:
             import urllib.request
+            token = (token or '').strip()
+            repo_name = (name or '').strip()
+            if not token:
+                return {'success': False, 'error': 'Token de GitHub vacío'}
+            if not repo_name:
+                return {'success': False, 'error': 'Nombre de repositorio vacío'}
             headers = {
-                'Authorization': f'Bearer {token}',
+                'Authorization': f'token {token}',
+                'Accept': 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
                 'Content-Type': 'application/json',
                 'User-Agent': 'DEX-STUDIO/1.0'
             }
             body = json.dumps({
-                'name': name,
+                'name': repo_name,
                 'description': description,
                 'private': False,
                 'auto_init': True
@@ -1654,9 +1674,34 @@ class API:
             req = urllib.request.Request('https://api.github.com/user/repos', data=body, headers=headers, method='POST')
             with urllib.request.urlopen(req, timeout=15) as resp:
                 repo_data = json.loads(resp.read().decode('utf-8'))
-            return {'success': True, 'repo_url': repo_data.get('html_url')}
+            return {
+                'success': True,
+                'repo_url': repo_data.get('html_url'),
+                'clone_url': repo_data.get('clone_url'),
+                'ssh_url': repo_data.get('ssh_url'),
+                'full_name': repo_data.get('full_name'),
+                'default_branch': repo_data.get('default_branch') or 'main'
+            }
         except urllib.error.HTTPError as e:
-            return {'success': False, 'error': f'Error HTTP {e.code}: {e.reason}'}
+            detail = ''
+            try:
+                payload = json.loads(e.read().decode('utf-8'))
+                detail = payload.get('message', '')
+            except Exception:
+                detail = ''
+            if e.code == 401:
+                return {'success': False, 'error': 'Token inválido o expirado (401). Revisa el token de GitHub.'}
+            if e.code == 403:
+                msg = 'Permiso denegado (403). Verifica scopes del token y límites de API.'
+                if detail:
+                    msg += f' {detail}'
+                return {'success': False, 'error': msg}
+            if e.code == 422:
+                msg = 'Nombre de repositorio inválido o ya existente (422).'
+                if detail:
+                    msg += f' {detail}'
+                return {'success': False, 'error': msg}
+            return {'success': False, 'error': f'Error HTTP {e.code}: {detail or e.reason}'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 

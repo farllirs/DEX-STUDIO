@@ -1,8 +1,22 @@
+# Python cache
 __pycache__/
 *.pyc
-build/
-.DS_Store
+
+# Local app config
 editor-config.json
-modules/
+
+# Build/output artifacts (do not push)
+build/
+dist/
 *.deb
+*.buildinfo
+*.changes
+*.dsc
+*.tar.*
+
+# Local data and modules
+modules/
 *.db
+
+# OS files
+.DS_Store
